@@ -14,9 +14,18 @@ GET  /all          Current state of all seen aircraft
 
 from flask import Flask, request, jsonify
 from datetime import datetime, timezone
+import logging
 import threading
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
 app = Flask(__name__)
+log.info("FlightTracker test server starting")
 
 # Target aircraft: ICAO hex (lowercase) -> registration
 TARGET_AIRCRAFT = {
@@ -127,12 +136,27 @@ def _purge_stale():
             del _state[h]
 
 
+_total_messages = 0
+
+
 @app.route("/sbs", methods=["POST"])
 def ingest():
+    global _total_messages
     data = request.get_json(silent=True) or {}
     messages = data.get("messages", [])
     _ingest(messages)
     _purge_stale()
+
+    _total_messages += len(messages)
+    with _lock:
+        aircraft_count = len(_state)
+        tracked_seen = [reg for hex_code, reg in TARGET_AIRCRAFT.items() if hex_code in _state]
+
+    log.info(
+        f"Batch: {len(messages):4d} msgs | total: {_total_messages:6d} | "
+        f"aircraft in state: {aircraft_count:3d} | "
+        f"tracked: {', '.join(tracked_seen) if tracked_seen else 'none'}"
+    )
     return jsonify({"ok": True, "count": len(messages)})
 
 
