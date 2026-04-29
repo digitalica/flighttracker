@@ -10,10 +10,10 @@ ADS-B feeder image (adsb.im / ultrafeeder / readsb)
        └─ adsbfeeder/feeder.py   — reads stream, POSTs batches to server every 5s
             └─ POST /sbs  ──►  website/server.py :5000
                                   stores readings in SQLite (flighttracker.db)
-                                  GET /api/aircraft  — list of tracked aircraft
-                                  GET /api/altitude/<hex>?minutes=N  — time-series data
-                                  GET /api/status    — last-seen per aircraft
-                                  GET /             — altitude graph frontend
+                                  GET /api/aircraft           — list of tracked aircraft
+                                  GET /api/altitude/<hex>?minutes=N  — {session_start, points}
+                                  GET /api/status             — last-seen per aircraft
+                                  GET /                       — altitude graph frontend
 ```
 
 The feeder filters by ICAO hex before sending; only target aircraft messages reach the server.
@@ -95,15 +95,27 @@ cd adsbfeeder && pip install -r requirements.txt && python feeder.py
 
 The frontend has no buttons. Interactions are:
 
-| Click target     | Action                                      |
-|------------------|---------------------------------------------|
-| Chart title      | Open aircraft picker (registration list)    |
-| Y-axis label     | Toggle barometric ↔ AGL altitude            |
-| X-axis label     | Cycle time range: 30 min → 1 h → 2 h → 4 h → 8 h → 16 h |
+| Click target  | Action                                                      |
+|---------------|-------------------------------------------------------------|
+| Chart title   | Open aircraft picker (sorted by registration)               |
+| Y-axis label  | Toggle barometric ↔ AGL altitude                            |
+| X-axis label  | Cycle time range: 30 min → 1 h → 2 h → 4 h → 8 h → 16 h  |
 
-The subtitle below the title shows last-seen status: `now`, `X min ago`, `X h ago`, or `not today`.
+State (aircraft, time range, altitude mode) is encoded in the URL as query parameters
+(`?ac=PH-TGC&mins=30&agl=0`) so pages can be bookmarked and shared.
 
-Aircraft picker symbols: `●` green = active (seen < 1 min), `●` amber = sleeping (seen today), `○` grey = inactive (not seen today).
+**Subtitle** — shows last-seen status for the displayed aircraft:
+- `now, 1h 3m flight time` — active (seen < 1 min), with time since session start
+- `14 min ago` / `2 h ago` — sleeping (seen today, not recently)
+- `not today` — inactive (no readings since midnight)
+
+**Aircraft picker** symbols: `●` green = active, `●` amber = sleeping, `○` grey = inactive.
+
+**Graph** — two lines share the time axis:
+- Blue (left axis): altitude in ft, barometric or AGL depending on toggle
+- Orange (right axis): smoothed rate of climb in ft/min, always centered on zero
+- Lines are broken at gaps > 30 s in the data (no interpolation across silences)
+- Graph always spans the full selected time range even with sparse data
 
 ## AGL altitude
 
@@ -112,10 +124,22 @@ first appears (new session after >120 s silence), if its first altitude reading 
 −500 to +500 ft it is stored as the ground offset for that session. AGL = baro − offset.
 Offsets are stored in the `agl_offsets` table and applied at query time.
 
+## Rate of climb
+
+Computed server-side from the stored altitude readings using a 60-second sliding time window:
+for each point, the rate is `(alt_at_+30s − alt_at_−30s) / dt × 60`. This smooths out
+transponder noise while staying responsive to real climbs and descents.
+
+## Data quality
+
+- **Outlier filter** — readings implying a climb/descent rate > 1000 ft/s are silently dropped
+  during ingest (`MAX_CLIMB_RATE` in `website/server.py`)
+- **Session detection** — a new session starts after 120 s of silence; first altitude in
+  [−500, +500] ft is stored as the AGL ground offset for that session
+
 ## Notes
 
 - SBS port is 30003 on most feeder images; update `SBS_PORT` in `feeder.py` if different
-- A new session starts after 120 s of silence (`STALE_SECONDS` in `website/server.py`)
 - Feeder buffers messages if the server is temporarily unreachable and retransmits
 - The graph downsamples to max 3000 points server-side for long time ranges (`MAX_POINTS`)
 - No data pruning — the SQLite database grows indefinitely (modest volume for this use case)
