@@ -99,7 +99,7 @@ The frontend has no buttons. Interactions are:
 |------------------|---------------------------------------------|
 | Chart title      | Open aircraft picker (registration list)    |
 | Y-axis label     | Toggle barometric ↔ AGL altitude            |
-| X-axis label     | Cycle time range: 30 min → 2 h → 4 h → 8 h → 16 h |
+| X-axis label     | Cycle time range: 30 min → 1 h → 2 h → 4 h → 8 h → 16 h |
 
 The subtitle below the title shows last-seen status: `now`, `X min ago`, `X h ago`, or `not today`.
 
