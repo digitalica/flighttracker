@@ -213,6 +213,9 @@ async function refresh() {
   chart.data.datasets[1].data = data.map(d => ({ x: new Date(d.t), y: d.roc }));
   chart.options.scales.x.min = new Date(now - mins * 60 * 1000);
   chart.options.scales.x.max = now;
+  const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
+  chart.options.scales.y2.min = -maxAbs;
+  chart.options.scales.y2.max =  maxAbs;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
   chart.update('none');
 }
