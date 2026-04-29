@@ -42,6 +42,8 @@ TARGET_HEXES = {
     "4845bb",  # PH-4B7
     "3e5e11",  # DK-AUZ
     "4847d7",  # PH-TGA
+    "4849b7",  # PH1372
+    "484f66",  # PH1489
 }
 
 
