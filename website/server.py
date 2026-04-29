@@ -58,8 +58,11 @@ SBS_IDX = {
 
 app = Flask(__name__)
 
-_last_seen: dict[str, datetime] = {}   # hex -> last seen (UTC)
+_last_seen: dict[str, datetime] = {}              # hex -> last seen (UTC)
+_last_alt:  dict[str, tuple[datetime, int]] = {}  # hex -> (ts, altitude_ft)
 _lock = threading.Lock()
+
+MAX_CLIMB_RATE = 1000  # ft/s — readings exceeding this are dropped as outliers
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +160,15 @@ def _ingest(messages: list[str]) -> None:
             altitude: int = parsed["altitude"]
             last = _last_seen.get(hex_code)
             new_session = last is None or (now - last).total_seconds() > STALE_SECONDS
+
+            # Outlier filter: drop readings that imply an impossible climb/descent rate
+            if not new_session and hex_code in _last_alt:
+                prev_ts, prev_alt = _last_alt[hex_code]
+                dt = (now - prev_ts).total_seconds()
+                if dt >= 1 and abs(altitude - prev_alt) / dt > MAX_CLIMB_RATE:
+                    continue
+
+            _last_alt[hex_code] = (now, altitude)
 
             if new_session and -500 <= altitude <= 500:
                 db_rows.append(("offset", hex_code, now_iso, altitude))
