@@ -13,7 +13,7 @@ ADS-B feeder image (adsb.im / ultrafeeder / readsb)
                                   GET /all      — all aircraft in state
 ```
 
-The feeder sends **all** aircraft data; filtering happens server-side.
+The feeder filters by ICAO hex before sending; only target aircraft messages reach the server.
 
 ## Tracked aircraft
 
@@ -22,7 +22,16 @@ The feeder sends **all** aircraft data; filtering happens server-side.
 | 484763   | PH-TGC      |        |
 | 48484C   | PH-GYS      |        |
 | 4849B9   | PH-GOZ      |        |
-| 461FA8   | 461FA8      | temp   |
+| 4848F9   | PH-RYF      |        |
+| 484583   | PH-RIS      |        |
+| 48462C   | PH-SKC      |        |
+| 48459C   | PH-VHA      |        |
+| 484655   | PH-CBN      |        |
+| 48481F   | PH-WMA      |        |
+| 486237   | PH-VHY      |        |
+| 485FD8   | PH-VHP      |        |
+| 4863FF   | PH-VHK      |        |
+| 484406   | PH-CJC      |        |
 
 ## Infrastructure
 

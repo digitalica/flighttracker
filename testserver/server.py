@@ -32,6 +32,16 @@ TARGET_AIRCRAFT = {
     "484763": "PH-TGC",
     "48484c": "PH-GYS",
     "4849b9": "PH-GOZ",
+    "4848f9": "PH-RYF",
+    "484583": "PH-RIS",
+    "48462c": "PH-SKC",
+    "48459c": "PH-VHA",
+    "484655": "PH-CBN",
+    "48481f": "PH-WMA",
+    "486237": "PH-VHY",
+    "485fd8": "PH-VHP",
+    "4863ff": "PH-VHK",
+    "484406": "PH-CJC",
 }
 
 # SBS field indices (0-based after splitting on comma)

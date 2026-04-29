@@ -2,8 +2,8 @@
 """
 ADS-B feeder client.
 
-Reads the SBS (BaseStation) TCP stream from the local dump1090/readsb instance
-and forwards message batches to the tracking server.
+Reads the SBS (BaseStation) TCP stream from the local dump1090/readsb instance,
+filters for target aircraft, and forwards message batches to the tracking server.
 """
 
 import socket
@@ -22,6 +22,31 @@ SERVER_URL = "http://100.70.200.82:5000/sbs"
 SEND_INTERVAL = 5        # seconds between POSTs
 BATCH_MAX = 500          # max messages per batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
+
+# Only messages for these ICAO hex codes are forwarded to the server
+TARGET_HEXES = {
+    "484763",  # PH-TGC
+    "48484c",  # PH-GYS
+    "4849b9",  # PH-GOZ
+    "4848f9",  # PH-RYF
+    "484583",  # PH-RIS
+    "48462c",  # PH-SKC
+    "48459c",  # PH-VHA
+    "484655",  # PH-CBN
+    "48481f",  # PH-WMA
+    "486237",  # PH-VHY
+    "485fd8",  # PH-VHP
+    "4863ff",  # PH-VHK
+    "484406",  # PH-CJC
+}
+
+
+def _is_target(line: str) -> bool:
+    """Return True if this SBS line belongs to one of the target aircraft."""
+    parts = line.split(",")
+    if len(parts) < 5:
+        return False
+    return parts[4].strip().lower() in TARGET_HEXES
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,7 +78,7 @@ def read_sbs():
                     with _lock:
                         for line in lines:
                             line = line.strip()
-                            if line:
+                            if line and _is_target(line):
                                 _buffer.append(line)
         except (OSError, socket.timeout) as exc:
             log.warning(f"SBS connection error: {exc}")
@@ -88,6 +113,7 @@ def main():
     log.info("ADS-B feeder starting")
     log.info(f"SBS source : {SBS_HOST}:{SBS_PORT}")
     log.info(f"Server     : {SERVER_URL}")
+    log.info(f"Tracking   : {', '.join(sorted(TARGET_HEXES))}")
     log.info(f"Send interval: {SEND_INTERVAL}s")
 
     reader = threading.Thread(target=read_sbs, daemon=True, name="sbs-reader")
