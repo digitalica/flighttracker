@@ -99,10 +99,12 @@ def _parse_sbs_line(line: str) -> dict | None:
         if cs:
             update["callsign"] = cs.strip()
 
+    if msg_type in ("2", "3", "5"):
+        update["altitude"] = get(SBS_IDX["altitude"], int)
+
     if msg_type in ("2", "3"):
         update["lat"] = get(SBS_IDX["lat"], float)
         update["lon"] = get(SBS_IDX["lon"], float)
-        update["altitude"] = get(SBS_IDX["altitude"], int)
 
     if msg_type in ("3", "4"):
         update["ground_speed"] = get(SBS_IDX["ground_speed"], float)
