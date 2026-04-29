@@ -38,6 +38,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 4847D7   | PH-TGA       | Reims-Cessna F150M          |                              |
 | 4849B7   | PH1372       | glider                      |                              |
 | 484F66   | PH1489       | glider                      |                              |
+| 484B68   | PH1432       | glider                      |                              |
 
 ## Infrastructure
 
