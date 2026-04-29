@@ -172,7 +172,19 @@ def ingest():
 @app.route("/tracked")
 def tracked():
     with _lock:
-        snapshot = {reg: _state.get(hex_code) for hex_code, reg in TARGET_AIRCRAFT.items()}
+        snapshot = {}
+        for hex_code, reg in TARGET_AIRCRAFT.items():
+            ac = _state.get(hex_code)
+            snapshot[reg] = {
+                "seen": ac is not None,
+                "altitude_ft": ac.get("altitude") if ac else None,
+                "callsign": ac.get("callsign") if ac else None,
+                "lat": ac.get("lat") if ac else None,
+                "lon": ac.get("lon") if ac else None,
+                "ground_speed": ac.get("ground_speed") if ac else None,
+                "on_ground": ac.get("on_ground") if ac else None,
+                "last_seen": ac.get("_last_seen") if ac else None,
+            }
     return jsonify(snapshot)
 
 
