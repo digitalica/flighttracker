@@ -159,12 +159,18 @@ def ingest():
     _total_messages += len(messages)
     with _lock:
         aircraft_count = len(_state)
-        tracked_seen = [reg for hex_code, reg in TARGET_AIRCRAFT.items() if hex_code in _state]
+        tracked_parts = []
+        for hex_code, reg in TARGET_AIRCRAFT.items():
+            ac = _state.get(hex_code)
+            if ac:
+                alt = ac.get("altitude")
+                alt_str = f"{alt}ft" if alt is not None else "alt?"
+                tracked_parts.append(f"{reg}:{alt_str}")
 
     log.info(
         f"Batch: {len(messages):4d} msgs | total: {_total_messages:6d} | "
         f"aircraft in state: {aircraft_count:3d} | "
-        f"tracked: {', '.join(tracked_seen) if tracked_seen else 'none'}"
+        f"tracked: {', '.join(tracked_parts) if tracked_parts else 'none'}"
     )
     return jsonify({"ok": True, "count": len(messages)})
 
