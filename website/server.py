@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""
+FlightTracker website server.
+
+Receives SBS batches from the feeder, stores altitude readings in SQLite,
+and serves a Chart.js altitude graph.
+
+Endpoints
+---------
+POST /sbs                    Ingest SBS batch from feeder
+GET  /api/aircraft           List of tracked aircraft (registration + hex)
+GET  /api/altitude/<hex>     Altitude time-series (?minutes=30)
+GET  /                       Frontend
+"""
+
+import sqlite3
+import threading
+from datetime import datetime, timezone, timedelta
+from pathlib import Path
+from flask import Flask, request, jsonify, render_template
+
+DB_PATH = Path(__file__).parent / "flighttracker.db"
+STALE_SECONDS = 120
+MAX_POINTS = 3000
+
+TARGET_AIRCRAFT = {
+    "484763": "PH-TGC",
+    "48484c": "PH-GYS",
+    "4849b9": "PH-GOZ",
+    "4848f9": "PH-RYF",
+    "484583": "PH-RIS",
+    "48462c": "PH-SKC",
+    "48459c": "PH-VHA",
+    "484655": "PH-CBN",
+    "48481f": "PH-WMA",
+    "486237": "PH-VHY",
+    "485fd8": "PH-VHP",
+    "4863ff": "PH-VHK",
+    "484406": "PH-CJC",
+    "4869bc": "PH-VHM",
+    "4845bb": "PH-4B7",
+    "3e5e11": "DK-AUZ",
+    "4847d7": "PH-TGA",
+    "4849b7": "PH1372",
+    "484f66": "PH1489",
+    "484b68": "PH1432",
+}
+
+SBS_IDX = {
+    "msg_type":  1,
+    "hex":       4,
+    "altitude": 11,
+    "lat":      14,
+    "lon":      15,
+    "on_ground":21,
+}
+
+app = Flask(__name__)
+
+_last_seen: dict[str, datetime] = {}   # hex -> last seen (UTC)
+_lock = threading.Lock()
+
+
+# ---------------------------------------------------------------------------
+# Database
+# ---------------------------------------------------------------------------
+
+def _db() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_db() -> None:
+    with _db() as conn:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS readings (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                icao_hex  TEXT    NOT NULL,
+                ts        TEXT    NOT NULL,
+                alt_baro  INTEGER,
+                lat       REAL,
+                lon       REAL,
+                on_ground INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS idx_readings ON readings(icao_hex, ts);
+
+            CREATE TABLE IF NOT EXISTS agl_offsets (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                icao_hex      TEXT    NOT NULL,
+                session_start TEXT    NOT NULL,
+                offset_ft     INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_offsets ON agl_offsets(icao_hex, session_start);
+        """)
+
+
+_init_db()
+
+
+# ---------------------------------------------------------------------------
+# SBS parsing
+# ---------------------------------------------------------------------------
+
+def _parse_sbs_line(line: str) -> dict | None:
+    if not line.startswith("MSG,"):
+        return None
+    parts = line.split(",")
+    if len(parts) < 11:
+        return None
+
+    def get(idx, cast=str):
+        try:
+            v = parts[idx].strip()
+            return cast(v) if v else None
+        except (IndexError, ValueError):
+            return None
+
+    msg_type = get(SBS_IDX["msg_type"])
+    hex_code = get(SBS_IDX["hex"])
+    if not hex_code:
+        return None
+
+    result: dict = {"hex": hex_code.lower(), "msg_type": msg_type}
+
+    if msg_type in ("2", "3", "5"):
+        result["altitude"] = get(SBS_IDX["altitude"], int)
+    if msg_type in ("2", "3"):
+        result["lat"] = get(SBS_IDX["lat"], float)
+        result["lon"] = get(SBS_IDX["lon"], float)
+
+    if len(parts) > SBS_IDX["on_ground"]:
+        gnd = get(SBS_IDX["on_ground"])
+        if gnd is not None:
+            result["on_ground"] = 1 if gnd in ("1", "-1") else 0
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Ingest
+# ---------------------------------------------------------------------------
+
+def _ingest(messages: list[str]) -> None:
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    db_rows: list[tuple] = []
+
+    with _lock:
+        for line in messages:
+            parsed = _parse_sbs_line(line)
+            if not parsed or parsed.get("altitude") is None:
+                continue
+
+            hex_code = parsed["hex"]
+            altitude: int = parsed["altitude"]
+            last = _last_seen.get(hex_code)
+            new_session = last is None or (now - last).total_seconds() > STALE_SECONDS
+
+            if new_session and -500 <= altitude <= 500:
+                db_rows.append(("offset", hex_code, now_iso, altitude))
+
+            _last_seen[hex_code] = now
+            db_rows.append((
+                "reading", hex_code, now_iso, altitude,
+                parsed.get("lat"), parsed.get("lon"), parsed.get("on_ground"),
+            ))
+
+    if not db_rows:
+        return
+
+    with _db() as conn:
+        for row in db_rows:
+            if row[0] == "offset":
+                conn.execute(
+                    "INSERT INTO agl_offsets (icao_hex, session_start, offset_ft) VALUES (?,?,?)",
+                    row[1:],
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO readings (icao_hex, ts, alt_baro, lat, lon, on_ground)"
+                    " VALUES (?,?,?,?,?,?)",
+                    row[1:],
+                )
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+@app.route("/sbs", methods=["POST"])
+def ingest():
+    data = request.get_json(silent=True) or {}
+    messages = data.get("messages", [])
+    _ingest(messages)
+    return jsonify({"ok": True, "count": len(messages)})
+
+
+@app.route("/api/aircraft")
+def list_aircraft():
+    result = sorted(
+        [{"hex": h, "registration": r} for h, r in TARGET_AIRCRAFT.items()],
+        key=lambda x: x["registration"],
+    )
+    return jsonify(result)
+
+
+@app.route("/api/altitude/<icao_hex>")
+def altitude(icao_hex: str):
+    minutes = request.args.get("minutes", 30, type=int)
+    since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+
+    with _db() as conn:
+        rows = conn.execute(
+            """
+            SELECT r.ts, r.alt_baro,
+                   COALESCE(
+                       (SELECT o.offset_ft
+                          FROM agl_offsets o
+                         WHERE o.icao_hex = r.icao_hex
+                           AND o.session_start <= r.ts
+                         ORDER BY o.session_start DESC
+                         LIMIT 1),
+                       0
+                   ) AS offset_ft
+              FROM readings r
+             WHERE r.icao_hex = ?
+               AND r.ts >= ?
+               AND r.alt_baro IS NOT NULL
+             ORDER BY r.ts
+            """,
+            (icao_hex, since),
+        ).fetchall()
+
+    step = max(1, len(rows) // MAX_POINTS)
+    rows = rows[::step]
+
+    return jsonify([
+        {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - r["offset_ft"]}
+        for r in rows
+    ])
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+if __name__ == "__main__":
+    print("FlightTracker website server")
+    print(f"Tracking {len(TARGET_AIRCRAFT)} aircraft")
+    app.run(host="0.0.0.0", port=5000, debug=True)

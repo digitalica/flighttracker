@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlightTracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #0d0d0d; color: #ccc; font-family: monospace; }
+    #wrap { position: relative; width: 100%; height: 100%; padding: 24px; }
+    #picker {
+      display: none;
+      position: absolute;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      z-index: 10;
+      min-width: 130px;
+      max-height: 360px;
+      overflow-y: auto;
+    }
+    #picker div {
+      padding: 7px 14px;
+      cursor: pointer;
+      font-size: 13px;
+      font-family: monospace;
+    }
+    #picker div:hover  { background: #252525; }
+    #picker div.active { color: #4a9eff; }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="chart"></canvas>
+  <div id="picker"></div>
+</div>
+<script>
+const RANGES  = [30, 120, 240, 480, 960];
+const RLABEL  = { 30: '30 min', 120: '2 h', 240: '4 h', 480: '8 h', 960: '16 h' };
+const DEF_HEX = '484763'; // PH-TGC
+
+let aircraft = [];
+let hex      = DEF_HEX;
+let mins     = 30;
+let useAGL   = false;
+let chart    = null;
+
+const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
+const yLabel = () => useAGL ? 'ft  (AGL)' : 'ft  (baro)';
+
+async function init() {
+  aircraft = await fetch('/api/aircraft').then(r => r.json());
+  buildChart();
+  await refresh();
+  setInterval(refresh, 30000);
+}
+
+function buildChart() {
+  const canvas = document.getElementById('chart');
+  chart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: {
+      datasets: [{
+        data: [],
+        borderColor: '#4a9eff',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        tension: 0.2,
+        fill: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: reg(),
+          color: '#ddd',
+          font: { size: 20, family: 'monospace', weight: 'normal' },
+          padding: { top: 4, bottom: 12 },
+        },
+        tooltip: {
+          backgroundColor: '#1a1a1a',
+          borderColor: '#333',
+          borderWidth: 1,
+          titleColor: '#888',
+          bodyColor: '#ddd',
+          bodyFont: { family: 'monospace' },
+          callbacks: { label: ctx => `${ctx.parsed.y} ft` }
+        }
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            tooltipFormat: 'HH:mm:ss',
+            displayFormats: { minute: 'HH:mm', hour: 'HH:mm' }
+          },
+          title: { display: true, text: RLABEL[mins], color: '#444', font: { size: 11, family: 'monospace' } },
+          ticks: { color: '#444', maxTicksLimit: 8, font: { family: 'monospace', size: 11 } },
+          grid: { color: '#1a1a1a' },
+        },
+        y: {
+          title: { display: true, text: yLabel(), color: '#444', font: { size: 11, family: 'monospace' } },
+          ticks: { color: '#444', font: { family: 'monospace', size: 11 } },
+          grid: { color: '#1a1a1a' },
+        }
+      }
+    }
+  });
+
+  // Interaction: title → aircraft picker, Y-axis → toggle baro/AGL, X-axis → cycle time range
+  canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const ca = chart.chartArea;
+    if (!ca) return;
+
+    if (y < ca.top) {
+      togglePicker();
+    } else if (x < ca.left && y >= ca.top && y <= ca.bottom) {
+      useAGL = !useAGL;
+      chart.options.scales.y.title.text = yLabel();
+      refresh();
+    } else if (y > ca.bottom && x >= ca.left && x <= ca.right) {
+      mins = RANGES[(RANGES.indexOf(mins) + 1) % RANGES.length];
+      chart.options.scales.x.title.text = RLABEL[mins];
+      chart.update('none');
+      refresh();
+    }
+  });
+
+  // Pointer cursor over interactive zones
+  canvas.addEventListener('mousemove', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const ca = chart.chartArea;
+    if (!ca) return;
+    const hot = y < ca.top
+      || (x < ca.left && y >= ca.top && y <= ca.bottom)
+      || (y > ca.bottom && x >= ca.left && x <= ca.right);
+    canvas.style.cursor = hot ? 'pointer' : 'default';
+  });
+}
+
+async function refresh() {
+  const data = await fetch(`/api/altitude/${hex}?minutes=${mins}`).then(r => r.json());
+  const key = useAGL ? 'agl' : 'baro';
+  chart.data.datasets[0].data = data.map(d => ({ x: new Date(d.t), y: d[key] }));
+  chart.update('none');
+}
+
+function togglePicker() {
+  const picker = document.getElementById('picker');
+  if (picker.style.display === 'block') {
+    picker.style.display = 'none';
+    return;
+  }
+
+  picker.innerHTML = aircraft.map(a =>
+    `<div class="${a.hex === hex ? 'active' : ''}" data-hex="${a.hex}">${a.registration}</div>`
+  ).join('');
+
+  picker.querySelectorAll('div').forEach(div => {
+    div.addEventListener('click', () => {
+      hex = div.dataset.hex;
+      picker.style.display = 'none';
+      chart.options.plugins.title.text = reg();
+      chart.update('none');
+      refresh();
+    });
+  });
+
+  // Position at chart area left, just below the title
+  const canvas = document.getElementById('chart');
+  const wrap   = document.getElementById('wrap');
+  const cRect  = canvas.getBoundingClientRect();
+  const wRect  = wrap.getBoundingClientRect();
+  picker.style.left = (cRect.left - wRect.left + chart.chartArea.left) + 'px';
+  picker.style.top  = (cRect.top  - wRect.top  + chart.chartArea.top - 4) + 'px';
+  picker.style.display = 'block';
+}
+
+// Close picker when clicking outside
+document.addEventListener('click', e => {
+  const picker = document.getElementById('picker');
+  const canvas = document.getElementById('chart');
+  if (picker.style.display === 'block'
+      && !picker.contains(e.target)
+      && e.target !== canvas) {
+    picker.style.display = 'none';
+  }
+});
+
+init();
+</script>
+</body>
+</html>
