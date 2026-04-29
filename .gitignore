@@ -4,3 +4,8 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+# editor swap files
+*.swp
+*.swo
+*~
+.*.swp
