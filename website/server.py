@@ -198,6 +198,28 @@ def _ingest(messages: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Rate of climb
+# ---------------------------------------------------------------------------
+
+def _compute_roc(rows, window_secs: int = 60) -> list[int]:
+    """Smoothed rate of climb in ft/min using a sliding time window."""
+    n = len(rows)
+    if n < 2:
+        return [0] * n
+    times = [datetime.fromisoformat(r["ts"]).timestamp() for r in rows]
+    alts  = [r["alt_baro"] for r in rows]
+    result = []
+    for i in range(n):
+        t  = times[i]
+        lo, hi = i, i
+        while lo > 0     and times[lo - 1] >= t - window_secs: lo -= 1
+        while hi < n - 1 and times[hi + 1] <= t + window_secs: hi += 1
+        dt = times[hi] - times[lo]
+        result.append(round((alts[hi] - alts[lo]) / dt * 60) if dt > 0 else 0)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
@@ -258,9 +280,10 @@ def altitude(icao_hex: str):
     step = max(1, len(rows) // MAX_POINTS)
     rows = rows[::step]
 
+    roc = _compute_roc(rows)
     return jsonify([
-        {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - r["offset_ft"]}
-        for r in rows
+        {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - r["offset_ft"], "roc": roc[i]}
+        for i, r in enumerate(rows)
     ])
 
 
