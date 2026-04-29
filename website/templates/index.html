@@ -73,8 +73,26 @@ function lastSeenLabel(h) {
   return mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)} h ago`;
 }
 
+function readUrlState() {
+  const p = new URLSearchParams(window.location.search);
+  const acReg = p.get('ac');
+  if (acReg) {
+    const found = aircraft.find(a => a.registration === acReg);
+    if (found) hex = found.hex;
+  }
+  const minsParam = parseInt(p.get('mins'));
+  if (RANGES.includes(minsParam)) mins = minsParam;
+  if (p.has('agl')) useAGL = p.get('agl') === '1';
+}
+
+function updateUrl() {
+  const p = new URLSearchParams({ ac: reg(), mins, agl: useAGL ? '1' : '0' });
+  history.replaceState(null, '', '?' + p.toString());
+}
+
 async function init() {
   aircraft = await fetch('/api/aircraft').then(r => r.json());
+  readUrlState();
   buildChart();
   await refresh();
   setInterval(refresh, 5000);
@@ -176,11 +194,13 @@ function buildChart() {
     } else if (x < ca.left && y >= ca.top && y <= ca.bottom) {
       useAGL = !useAGL;
       chart.options.scales.y.title.text = yLabel();
+      updateUrl();
       refresh();
     } else if (y > ca.bottom && x >= ca.left && x <= ca.right) {
       mins = RANGES[(RANGES.indexOf(mins) + 1) % RANGES.length];
       chart.options.scales.x.title.text = RLABEL[mins];
       chart.update('none');
+      updateUrl();
       refresh();
     }
   });
@@ -242,6 +262,7 @@ function togglePicker() {
       picker.style.display = 'none';
       chart.options.plugins.title.text = reg();
       chart.update('none');
+      updateUrl();
       refresh();
     });
   });
