@@ -41,12 +41,13 @@ const RANGES  = [30, 60, 120, 240, 480, 960];
 const RLABEL  = { 30: '30 min', 60: '1 h', 120: '2 h', 240: '4 h', 480: '8 h', 960: '16 h' };
 const DEF_HEX = '484763'; // PH-TGC
 
-let aircraft  = [];
-let statusMap = {};   // hex -> last_seen ISO string or null
-let hex       = DEF_HEX;
-let mins      = 30;
-let useAGL    = false;
-let chart     = null;
+let aircraft     = [];
+let statusMap    = {};   // hex -> last_seen ISO string or null
+let sessionStart = null; // Date of current session start for displayed aircraft
+let hex          = DEF_HEX;
+let mins         = 30;
+let useAGL       = false;
+let chart        = null;
 
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
 const yLabel = () => useAGL ? 'ft  (AGL)' : 'ft  (baro)';
@@ -64,9 +65,19 @@ function acStatus(h) {
 const STATUS_SYMBOL = { active: '●', sleeping: '●', inactive: '○' };
 const STATUS_COLOR  = { active: '#5c5', sleeping: '#fa4', inactive: '#444' };
 
+function flightTimeStr(startDate) {
+  const totalMins = Math.floor((Date.now() - startDate) / 60_000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 function lastSeenLabel(h) {
   const s = acStatus(h);
-  if (s === 'active')   return 'now';
+  if (s === 'active') {
+    const ft = sessionStart ? `, ${flightTimeStr(sessionStart)} flight time` : '';
+    return `now${ft}`;
+  }
   if (s === 'inactive') return 'not today';
   const diffMs = Date.now() - new Date(statusMap[h]);
   const mins = Math.floor(diffMs / 60_000);
@@ -220,12 +231,14 @@ function buildChart() {
 }
 
 async function refresh() {
-  const [data, newStatus] = await Promise.all([
+  const [resp, newStatus] = await Promise.all([
     fetch(`/api/altitude/${hex}?minutes=${mins}`).then(r => r.json()),
     fetch('/api/status').then(r => r.json()),
   ]);
 
-  statusMap = newStatus;
+  statusMap    = newStatus;
+  sessionStart = resp.session_start ? new Date(resp.session_start) : null;
+  const data   = resp.points;
 
   const key = useAGL ? 'agl' : 'baro';
   const now = new Date();

@@ -220,6 +220,29 @@ def _compute_roc(rows, window_secs: int = 60) -> list[int]:
     return result
 
 
+def _find_session_start(icao_hex: str) -> str | None:
+    """Return the timestamp of the first reading in the current flight session."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    with _db() as conn:
+        row = conn.execute(
+            """
+            WITH ordered AS (
+              SELECT ts, LAG(ts) OVER (ORDER BY ts) AS prev_ts
+              FROM readings
+              WHERE icao_hex = ? AND ts >= ?
+            ),
+            starts AS (
+              SELECT ts FROM ordered
+              WHERE prev_ts IS NULL
+                 OR (julianday(ts) - julianday(prev_ts)) * 86400 > ?
+            )
+            SELECT MAX(ts) AS session_start FROM starts
+            """,
+            (icao_hex, since, STALE_SECONDS),
+        ).fetchone()
+    return row["session_start"] if row else None
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -282,10 +305,13 @@ def altitude(icao_hex: str):
     rows = rows[::step]
 
     roc = _compute_roc(rows)
-    return jsonify([
-        {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - r["offset_ft"], "roc": roc[i]}
-        for i, r in enumerate(rows)
-    ])
+    return jsonify({
+        "session_start": _find_session_start(icao_hex),
+        "points": [
+            {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - r["offset_ft"], "roc": roc[i]}
+            for i, r in enumerate(rows)
+        ],
+    })
 
 
 @app.route("/")
