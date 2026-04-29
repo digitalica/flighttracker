@@ -19,8 +19,8 @@ SBS_HOST = "localhost"
 SBS_PORT = 30003
 
 SERVER_URL = "http://100.70.200.82:5000/sbs"
-SEND_INTERVAL = 5        # seconds between POSTs
-BATCH_MAX = 500          # max messages per batch
+SEND_INTERVAL = 1        # seconds between POSTs
+BATCH_MAX = 10           # max messages per batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
 
 # Only messages for these ICAO hex codes are forwarded to the server
