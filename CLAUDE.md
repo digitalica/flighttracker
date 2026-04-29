@@ -43,6 +43,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 484F66   | PH1489       | glider                      |                              |
 | 484B68   | PH1432       | glider                      |                              |
 | 4845AE   | PH-DON       | Cessna 172P Skyhawk         |                              |
+| 484737   | PH-LEN       | Reims-Cessna F172N Skyhawk  |                              |
 
 ## Infrastructure
 

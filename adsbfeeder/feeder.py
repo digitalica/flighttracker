@@ -46,6 +46,7 @@ TARGET_HEXES = {
     "484f66",  # PH1489
     "484b68",  # PH1432
     "4845ae",  # PH-DON
+    "484737",  # PH-LEN
 }
 
 
