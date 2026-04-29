@@ -54,7 +54,7 @@ async function init() {
   aircraft = await fetch('/api/aircraft').then(r => r.json());
   buildChart();
   await refresh();
-  setInterval(refresh, 30000);
+  setInterval(refresh, 5000);
 }
 
 function buildChart() {
