@@ -38,6 +38,8 @@ TARGET_HEXES = {
     "485fd8",  # PH-VHP
     "4863ff",  # PH-VHK
     "484406",  # PH-CJC
+    "4869bc",  # PH-VHM
+    "4845bb",  # PH-4B7
 }
 
 

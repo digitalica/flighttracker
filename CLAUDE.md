@@ -32,6 +32,8 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 485FD8   | PH-VHP      |        |
 | 4863FF   | PH-VHK      |        |
 | 484406   | PH-CJC      |        |
+| 4869BC   | PH-VHM      |        |
+| 4845BB   | PH-4B7      |        |
 
 ## Infrastructure
 
