@@ -205,6 +205,16 @@ def list_aircraft():
     return jsonify(result)
 
 
+@app.route("/api/status")
+def status():
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT icao_hex, MAX(ts) AS last_seen FROM readings GROUP BY icao_hex"
+        ).fetchall()
+    seen = {r["icao_hex"]: r["last_seen"] for r in rows}
+    return jsonify({h: seen.get(h) for h in TARGET_AIRCRAFT})
+
+
 @app.route("/api/altitude/<icao_hex>")
 def altitude(icao_hex: str):
     minutes = request.args.get("minutes", 30, type=int)
