@@ -17,27 +17,27 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 
 ## Tracked aircraft
 
-| ICAO hex | Registration | Notes  |
-|----------|-------------|--------|
-| 484763   | PH-TGC      |        |
-| 48484C   | PH-GYS      |        |
-| 4849B9   | PH-GOZ      |        |
-| 4848F9   | PH-RYF      |        |
-| 484583   | PH-RIS      |        |
-| 48462C   | PH-SKC      |        |
-| 48459C   | PH-VHA      |        |
-| 484655   | PH-CBN      |        |
-| 48481F   | PH-WMA      |        |
-| 486237   | PH-VHY      |        |
-| 485FD8   | PH-VHP      |        |
-| 4863FF   | PH-VHK      |        |
-| 484406   | PH-CJC      |        |
-| 4869BC   | PH-VHM      |        |
-| 4845BB   | PH-4B7      |        |
-| 3E5E11   | DK-AUZ      |        |
-| 4847D7   | PH-TGA      |        |
-| 4849B7   | PH1372      | glider |
-| 484F66   | PH1489      | glider |
+| ICAO hex | Registration | Type                        | Notes                        |
+|----------|--------------|-----------------------------|------------------------------|
+| 484763   | PH-TGC       | Cessna 182R Skylane         |                              |
+| 48484C   | PH-GYS       | Reims-Cessna F172N Skyhawk  |                              |
+| 4849B9   | PH-GOZ       | Aviat A-1 Husky             |                              |
+| 4848F9   | PH-RYF       | Hughes 269C                 | helicopter, Heli Holland     |
+| 484583   | PH-RIS       | Airbus H130                 | helicopter, KNSF Flight Svcs |
+| 48462C   | PH-SKC       | Reims-Cessna F172N Skyhawk  |                              |
+| 48459C   | PH-VHA       | Tecnam P2002JF Sierra       | Vliegschool Hilversum        |
+| 484655   | PH-CBN       | Reims-Cessna F172N Skyhawk  |                              |
+| 48481F   | PH-WMA       | Reims-Cessna F172P Skyhawk  |                              |
+| 486237   | PH-VHY       | Cessna 172P Skyhawk         | Vliegschool Hilversum        |
+| 485FD8   | PH-VHP       | Piper PA-28-161 Warrior     | Vliegschool Hilversum        |
+| 4863FF   | PH-VHK       | Piper PA-28-161 Warrior     | Vliegschool Hilversum        |
+| 484406   | PH-CJC       | Piper PA-28-181 Archer III  |                              |
+| 4869BC   | PH-VHM       | Tecnam P2002JF Sierra       | Vliegschool Hilversum        |
+| 4845BB   | PH-4B7       | Aerospool WT-9 Dynamic      | ultralight                   |
+| 3E5E11   | DK-AUZ       | Scheibe SF-25C Falke        | motorglider, German (D-KAUZ) |
+| 4847D7   | PH-TGA       | Reims-Cessna F150M          |                              |
+| 4849B7   | PH1372       | glider                      |                              |
+| 484F66   | PH1489       | glider                      |                              |
 
 ## Infrastructure
 
