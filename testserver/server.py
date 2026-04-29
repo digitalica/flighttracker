@@ -32,7 +32,6 @@ TARGET_AIRCRAFT = {
     "484763": "PH-TGC",
     "48484c": "PH-GYS",
     "4849b9": "PH-GOZ",
-    "461fa8": "461FA8",  # temp
 }
 
 # SBS field indices (0-based after splitting on comma)
