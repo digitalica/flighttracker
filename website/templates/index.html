@@ -52,7 +52,34 @@ let chart        = null;
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
 const yLabel = () => useAGL ? 'ft  (AGL)' : 'ft  (baro)';
 
-const GAP_SECS = 30;
+const GAP_SECS = 60;
+
+function findGaps(data) {
+  const gaps = [];
+  for (let i = 1; i < data.length; i++) {
+    const dt = (new Date(data[i].t) - new Date(data[i - 1].t)) / 1000;
+    if (dt > GAP_SECS) gaps.push({ from: new Date(data[i - 1].t), to: new Date(data[i].t) });
+  }
+  return gaps;
+}
+
+const gapPlugin = {
+  id: 'gaps',
+  beforeDraw(chart) {
+    const gaps = chart._gapRanges;
+    if (!gaps || !gaps.length) return;
+    const { ctx, chartArea: ca, scales } = chart;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 80, 80, 0.10)';
+    for (const g of gaps) {
+      const x1 = Math.max(scales.x.getPixelForValue(g.from), ca.left);
+      const x2 = Math.min(scales.x.getPixelForValue(g.to),   ca.right);
+      if (x2 > x1) ctx.fillRect(x1, ca.top, x2 - x1, ca.height);
+    }
+    ctx.restore();
+  }
+};
+Chart.register(gapPlugin);
 
 function buildSeries(data, key) {
   const out = [];
@@ -263,6 +290,7 @@ async function refresh() {
   const now = new Date();
   chart.data.datasets[0].data = buildSeries(data, key);
   chart.data.datasets[1].data = buildSeries(data, 'roc');
+  chart._gapRanges = findGaps(data);
   chart.options.scales.x.min = new Date(now - mins * 60 * 1000);
   chart.options.scales.x.max = now;
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
