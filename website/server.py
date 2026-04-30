@@ -15,6 +15,7 @@ GET  /                       Frontend
 
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template
@@ -73,10 +74,18 @@ MAX_CLIMB_RATE = 1000  # ft/s — readings exceeding this are dropped as outlier
 # Database
 # ---------------------------------------------------------------------------
 
-def _db() -> sqlite3.Connection:
+@contextmanager
+def _db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def _init_db() -> None:
