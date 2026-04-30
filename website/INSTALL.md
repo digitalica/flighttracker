@@ -65,6 +65,36 @@ cd website && pip install -r requirements.txt && python server.py
 
 The database (`flighttracker.db`) is created automatically on first run in the same directory as `server.py`.
 
+## Exporting data to CSV
+
+`export.py` queries the SQLite database and writes a CSV suitable for Excel.
+No server restart needed; it reads the database file directly.
+
+```bash
+cd /opt/flighttracker-website
+
+# All data → stdout
+python export.py
+
+# Today's data for one aircraft (registration or ICAO hex both work)
+python export.py --today --ac PH-TGC --out phtgc_today.csv
+python export.py --today --ac 484763 --out phtgc_today.csv
+
+# Specific date, all aircraft
+python export.py --date 2026-04-30 --out 20260430.csv
+
+# Specific date + aircraft
+python export.py --date 2026-04-30 --ac PH-GYS --out phgys_20260430.csv
+```
+
+Output columns: `timestamp, registration, icao_hex, altitude_ft, lat, lon, on_ground`.
+
+To copy the file to your local machine:
+
+```bash
+scp root@100.70.200.82:/opt/flighttracker-website/phtgc_today.csv .
+```
+
 ## Replacing the test server
 
 This server uses the same `POST /sbs` contract as the test server, so the feeder needs no changes — just point `SERVER_URL` in `feeder.py` at this server's address if it runs on a different host.
