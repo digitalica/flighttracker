@@ -46,6 +46,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 484737   | PH-LEN       | Reims-Cessna F172N Skyhawk  |                              |
 | 484846   | PH1133       | Diamond HK36TC Super Dimona | motorglider                  |
 | 485E08   | PH-4T7       | TL Ultralight TL-3000 Sirius| ultralight                   |
+| 484BF9   | PH-GIN       | Fuji FA-200-180 Aero Subaru |                              |
 
 ## Infrastructure
 
