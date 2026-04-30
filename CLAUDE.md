@@ -47,6 +47,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 484846   | PH1133       | Diamond HK36TC Super Dimona | motorglider                  |
 | 485E08   | PH-4T7       | TL Ultralight TL-3000 Sirius| ultralight                   |
 | 484BF9   | PH-GIN       | Fuji FA-200-180 Aero Subaru |                              |
+| 48462E   | PH-MFT       | Diamond DV20 Katana         |                              |
 
 ## Infrastructure
 
