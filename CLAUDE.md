@@ -25,6 +25,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 484763   | PH-TGC       | Cessna 182R Skylane         |                              |
 | 48484C   | PH-GYS       | Reims-Cessna F172N Skyhawk  |                              |
 | 4849B9   | PH-GOZ       | Aviat A-1 Husky             |                              |
+| 4849A0   | PH-ACX       |                             |                              |
 | 4848F9   | PH-RYF       | Hughes 269C                 | helicopter, Heli Holland     |
 | 484583   | PH-RIS       | Airbus H130                 | helicopter, KNSF Flight Svcs |
 | 48462C   | PH-SKC       | Reims-Cessna F172N Skyhawk  |                              |
