@@ -18,7 +18,8 @@ import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from flask import Flask, request, jsonify, render_template
+import tempfile
+from flask import Flask, request, jsonify, render_template, send_file
 
 DB_PATH = Path(__file__).parent / "flighttracker.db"
 STALE_SECONDS = 120
@@ -326,6 +327,26 @@ def altitude(icao_hex: str):
             for i, r in enumerate(rows)
         ],
     })
+
+
+@app.route("/db")
+def download_db():
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    src = sqlite3.connect(DB_PATH)
+    dst = sqlite3.connect(tmp.name)
+    try:
+        with dst:
+            src.backup(dst)
+    finally:
+        src.close()
+        dst.close()
+    return send_file(
+        tmp.name,
+        as_attachment=True,
+        download_name="flighttracker.db",
+        mimetype="application/octet-stream",
+    )
 
 
 @app.route("/")
