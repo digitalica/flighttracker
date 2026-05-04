@@ -25,6 +25,12 @@ DB_PATH = Path(__file__).parent / "flighttracker.db"
 STALE_SECONDS = 120
 MAX_POINTS = 3000
 
+# IPs allowed to download the SQLite snapshot via /db
+DB_ALLOWED_IPS = {
+    "45.83.241.206",   # desktop, public
+    "100.111.194.45",  # desktop, tailscale
+}
+
 TARGET_AIRCRAFT = {
     "484763": "PH-TGC",
     "48484c": "PH-GYS",
@@ -169,30 +175,37 @@ def _ingest(messages: list[str]) -> None:
     with _lock:
         for line in messages:
             parsed = _parse_sbs_line(line)
-            if not parsed or parsed.get("altitude") is None:
+            if not parsed:
+                continue
+
+            altitude = parsed.get("altitude")
+            lat = parsed.get("lat")
+            lon = parsed.get("lon")
+            if altitude is None and (lat is None or lon is None):
                 continue
 
             hex_code = parsed["hex"]
-            altitude: int = parsed["altitude"]
-            last = _last_seen.get(hex_code)
-            new_session = last is None or (now - last).total_seconds() > STALE_SECONDS
 
-            # Outlier filter: drop readings that imply an impossible climb/descent rate
-            if not new_session and hex_code in _last_alt:
-                prev_ts, prev_alt = _last_alt[hex_code]
-                dt = (now - prev_ts).total_seconds()
-                if dt >= 1 and abs(altitude - prev_alt) / dt > MAX_CLIMB_RATE:
-                    continue
+            if altitude is not None:
+                prev = _last_alt.get(hex_code)
+                new_session = prev is None or (now - prev[0]).total_seconds() > STALE_SECONDS
 
-            _last_alt[hex_code] = (now, altitude)
+                # Outlier filter: drop readings that imply an impossible climb/descent rate
+                if not new_session:
+                    prev_ts, prev_alt = prev
+                    dt = (now - prev_ts).total_seconds()
+                    if dt >= 1 and abs(altitude - prev_alt) / dt > MAX_CLIMB_RATE:
+                        continue
 
-            if new_session and -500 <= altitude <= 500:
-                db_rows.append(("offset", hex_code, now_iso, altitude))
+                _last_alt[hex_code] = (now, altitude)
+
+                if new_session and -500 <= altitude <= 500:
+                    db_rows.append(("offset", hex_code, now_iso, altitude))
 
             _last_seen[hex_code] = now
             db_rows.append((
                 "reading", hex_code, now_iso, altitude,
-                parsed.get("lat"), parsed.get("lon"), parsed.get("on_ground"),
+                lat, lon, parsed.get("on_ground"),
             ))
 
     if not db_rows:
@@ -331,6 +344,8 @@ def altitude(icao_hex: str):
 
 @app.route("/db")
 def download_db():
+    if request.remote_addr not in DB_ALLOWED_IPS:
+        return jsonify({"error": "forbidden"}), 403
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
     src = sqlite3.connect(DB_PATH)
