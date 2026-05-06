@@ -73,10 +73,16 @@ testserver/                     # superseded by website/; kept for reference
   INSTALL.md
 
 website/
-  server.py                     # Flask server: ingest + SQLite + API + frontend
+  server.py                     # Flask/gunicorn server: ingest + SQLite + API + frontend
   templates/index.html          # Chart.js altitude graph, dark theme
-  requirements.txt              # flask
+  static/favicon.png            # browser tab icon
+  requirements.txt              # flask, gunicorn
+  Dockerfile                    # single-container deployment
+  .dockerignore
+  export.py                     # CLI CSV export tool
   INSTALL.md                    # server install steps
+
+docker-compose.yml              # brings up the website container
   flighttracker.db              # SQLite database (created on first run, not in git)
 ```
 

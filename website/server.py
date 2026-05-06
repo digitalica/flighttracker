@@ -13,6 +13,7 @@ GET  /api/altitude/<hex>     Altitude time-series (?minutes=30)
 GET  /                       Frontend
 """
 
+import os
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -21,7 +22,7 @@ from pathlib import Path
 import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
 
-DB_PATH = Path(__file__).parent / "flighttracker.db"
+DB_PATH = Path(os.environ.get("DB_PATH", Path(__file__).parent / "flighttracker.db"))
 STALE_SECONDS = 120
 MAX_POINTS = 3000
 
@@ -101,6 +102,7 @@ def _db():
 def _init_db() -> None:
     with _db() as conn:
         conn.executescript("""
+            PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS readings (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 icao_hex  TEXT    NOT NULL,

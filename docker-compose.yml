@@ -1,0 +1,24 @@
+services:
+  website:
+    image: ghcr.io/digitalica/flighttracker:latest
+    # build: website/   # uncomment to build locally instead
+    restart: unless-stopped
+    volumes:
+      - db_data:/data
+    environment:
+      - DB_PATH=/data/flighttracker.db
+    networks:
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flighttracker.rule=Host(`phtgc.nl`)"
+      - "traefik.http.routers.flighttracker.entrypoints=websecure"
+      - "traefik.http.routers.flighttracker.tls.certresolver=letsencrypt"
+      - "traefik.http.services.flighttracker.loadbalancer.server.port=5000"
+
+volumes:
+  db_data:
+
+networks:
+  proxy:
+    external: true
