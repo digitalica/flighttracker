@@ -18,7 +18,7 @@ import requests
 SBS_HOST = "localhost"
 SBS_PORT = 30003
 
-SERVER_URL = "http://100.70.200.82:5000/sbs"
+SERVER_URL = "https://phtgc.nl/sbs"
 SEND_INTERVAL = 1        # seconds between POSTs
 BATCH_MAX = 10           # max messages per batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect

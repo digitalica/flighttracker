@@ -21,13 +21,14 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 DB_PATH = Path(os.environ.get("DB_PATH", Path(__file__).parent / "flighttracker.db"))
 STALE_SECONDS = 120
 MAX_POINTS = 3000
 
-# IPs allowed to download the SQLite snapshot via /db
-DB_ALLOWED_IPS = {
+# IPs allowed to call /sbs (feeder) and /db (backup download)
+ALLOWED_IPS = {
     "45.83.241.206",   # desktop, public
     "100.111.194.45",  # desktop, tailscale
 }
@@ -73,6 +74,7 @@ SBS_IDX = {
 }
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 _last_seen: dict[str, datetime] = {}              # hex -> last seen (UTC)
 _last_alt:  dict[str, tuple[datetime, int]] = {}  # hex -> (ts, altitude_ft)
@@ -280,6 +282,8 @@ def _find_session_start(icao_hex: str) -> str | None:
 
 @app.route("/sbs", methods=["POST"])
 def ingest():
+    if request.remote_addr not in ALLOWED_IPS:
+        return jsonify({"error": "forbidden"}), 403
     data = request.get_json(silent=True) or {}
     messages = data.get("messages", [])
     _ingest(messages)
@@ -347,7 +351,7 @@ def altitude(icao_hex: str):
 
 @app.route("/db")
 def download_db():
-    if request.remote_addr not in DB_ALLOWED_IPS:
+    if request.remote_addr not in ALLOWED_IPS:
         return jsonify({"error": "forbidden"}), 403
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()

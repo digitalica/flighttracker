@@ -53,10 +53,11 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 
 ## Infrastructure
 
-| Role    | Address       |
-|---------|---------------|
-| Server  | 100.70.200.82 |
-| Network | Tailscale     |
+| Role      | Address           |
+|-----------|-------------------|
+| Server IP | 100.70.200.82     |
+| Public URL| https://phtgc.nl  |
+| Network   | Tailscale + Traefik|
 
 ## Repo layout
 
