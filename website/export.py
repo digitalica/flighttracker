@@ -28,7 +28,7 @@ import argparse
 import csv
 import sqlite3
 import sys
-from datetime import date, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / "flighttracker.db"
@@ -110,8 +110,15 @@ def export(date_str: str | None, hex_filter: str | None, out):
     rows = conn.execute(query, params).fetchall()
     conn.close()
 
+    def to_calc(ts: str) -> str:
+        """Convert ISO timestamp to YYYY-MM-DD HH:MM:SS (UTC) for LibreOffice Calc."""
+        try:
+            return datetime.fromisoformat(ts).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+        except ValueError:
+            return ts
+
     writer = csv.writer(out)
-    writer.writerow(["timestamp", "registration", "icao_hex", "altitude_ft", "lat", "lon", "on_ground"])
+    writer.writerow(["timestamp", "datetime_utc", "registration", "icao_hex", "altitude_ft", "lat", "lon", "on_ground"])
 
     for row in rows:
         hex_ = row["icao_hex"].lower()
@@ -119,6 +126,7 @@ def export(date_str: str | None, hex_filter: str | None, out):
         on_ground = {1: "yes", 0: "no"}.get(row["on_ground"], "")
         writer.writerow([
             row["ts"],
+            to_calc(row["ts"]),
             reg,
             hex_,
             row["alt_baro"] if row["alt_baro"] is not None else "",
