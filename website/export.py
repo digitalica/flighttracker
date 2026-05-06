@@ -38,6 +38,7 @@ TARGET_AIRCRAFT = {
     "48484c": "PH-GYS",
     "4849b9": "PH-GOZ",
     "4849a0": "PH-ACX",
+    "484ae6": "PH-GBA",
     "4848f9": "PH-RYF",
     "484583": "PH-RIS",
     "48462c": "PH-SKC",
