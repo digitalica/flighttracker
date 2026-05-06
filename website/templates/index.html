@@ -10,7 +10,53 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: #0d0d0d; color: #ccc; font-family: monospace; }
-    #wrap { position: relative; width: 100%; height: 100%; padding: 24px; }
+
+    /* ── Hamburger ── */
+    #hamburger {
+      position: fixed;
+      top: 14px;
+      right: 18px;
+      z-index: 100;
+      cursor: pointer;
+      font-size: 22px;
+      color: #888;
+      user-select: none;
+      line-height: 1;
+    }
+    #hamburger:hover { color: #ddd; }
+
+    /* ── Nav menu ── */
+    #nav {
+      display: none;
+      position: fixed;
+      top: 42px;
+      right: 18px;
+      z-index: 100;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      min-width: 130px;
+    }
+    #nav div {
+      padding: 9px 16px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    #nav div:hover   { background: #252525; }
+    #nav div.active  { color: #4a9eff; }
+
+    /* ── Views ── */
+    #view-altitude { width: 100%; height: 100%; padding: 24px; position: relative; }
+    #view-about    { display: none; padding: 48px 32px; max-width: 640px; line-height: 1.7; }
+    #view-about h1 { font-size: 18px; color: #ddd; margin-bottom: 20px; font-weight: normal; }
+    #view-about p  { font-size: 13px; color: #aaa; margin-bottom: 14px; }
+    #view-about a  { color: #4a9eff; text-decoration: none; }
+    #view-about a:hover { text-decoration: underline; }
+    #view-about table  { border-collapse: collapse; font-size: 12px; color: #aaa; margin-bottom: 14px; }
+    #view-about td, #view-about th { padding: 4px 16px 4px 0; vertical-align: top; }
+    #view-about th { color: #666; font-weight: normal; }
+
+    /* ── Aircraft picker (altitude view) ── */
     #picker {
       display: none;
       position: absolute;
@@ -33,18 +79,70 @@
   </style>
 </head>
 <body>
-<div id="wrap">
+
+<span id="hamburger">&#9776;</span>
+<div id="nav">
+  <div id="nav-altitude" class="active" onclick="showView('altitude')">Altitude</div>
+  <div id="nav-about"               onclick="showView('about')">About</div>
+</div>
+
+<div id="view-altitude">
   <canvas id="chart"></canvas>
   <div id="picker"></div>
 </div>
+
+<div id="view-about">
+  <h1>PHTGC FlightTracker</h1>
+  <p>
+    Personal project that tracks a small fleet of aircraft using an ADS-B receiver.
+    An ADS-B feeder (adsb.im / ultrafeeder) streams transponder messages over SBS TCP,
+    which are forwarded here and stored in a SQLite database.
+    The altitude graph updates every 5 seconds.
+  </p>
+  <p>
+    <table>
+      <tr><th>Stack</th><td>Python · Flask · Chart.js · SQLite · Docker · Traefik</td></tr>
+      <tr><th>Source</th><td><a href="https://github.com/digitalica/flighttracker" target="_blank">github.com/digitalica/flighttracker</a></td></tr>
+    </table>
+  </p>
+  <p>
+    <b>How to use the graph</b><br>
+    Click the <i>aircraft registration</i> (chart title) to pick a different aircraft.<br>
+    Click the <i>Y-axis label</i> to toggle barometric ↔ AGL altitude.<br>
+    Click the <i>X-axis label</i> to cycle through time ranges (30 min → 16 h).<br>
+    Red-shaded bands indicate periods without ADS-B reception (&gt; 60 s gap).
+  </p>
+</div>
+
 <script>
+// ── View switching ────────────────────────────────────────────────────────────
+function showView(name) {
+  document.getElementById('view-altitude').style.display = name === 'altitude' ? '' : 'none';
+  document.getElementById('view-about').style.display    = name === 'about'    ? '' : 'none';
+  document.getElementById('nav-altitude').className = name === 'altitude' ? 'active' : '';
+  document.getElementById('nav-about').className    = name === 'about'    ? 'active' : '';
+  document.getElementById('nav').style.display = 'none';
+  if (name === 'altitude' && chart) chart.resize();
+}
+
+document.getElementById('hamburger').addEventListener('click', e => {
+  e.stopPropagation();
+  const nav = document.getElementById('nav');
+  nav.style.display = nav.style.display === 'block' ? 'none' : 'block';
+});
+
+document.addEventListener('click', () => {
+  document.getElementById('nav').style.display = 'none';
+});
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
 const RANGES  = [30, 60, 120, 240, 480, 960];
 const RLABEL  = { 30: '30 min', 60: '1 h', 120: '2 h', 240: '4 h', 480: '8 h', 960: '16 h' };
 const DEF_HEX = '484763'; // PH-TGC
 
 let aircraft     = [];
-let statusMap    = {};   // hex -> last_seen ISO string or null
-let sessionStart = null; // Date of current session start for displayed aircraft
+let statusMap    = {};
+let sessionStart = null;
 let hex          = DEF_HEX;
 let mins         = 30;
 let useAGL       = false;
@@ -97,7 +195,6 @@ function buildSeries(data, key) {
   return out;
 }
 
-// Returns 'active' | 'sleeping' | 'inactive'
 function acStatus(h) {
   const ls = statusMap[h];
   if (!ls) return 'inactive';
@@ -239,7 +336,6 @@ function buildChart() {
     }
   });
 
-  // Interaction: title area → aircraft picker, Y-axis → toggle baro/AGL, X-axis → cycle time range
   canvas.addEventListener('click', function(e) {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -263,7 +359,6 @@ function buildChart() {
     }
   });
 
-  // Pointer cursor over interactive zones
   canvas.addEventListener('mousemove', function(e) {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -328,9 +423,8 @@ function togglePicker() {
     });
   });
 
-  // Position at chart area left, just below the title
   const canvas = document.getElementById('chart');
-  const wrap   = document.getElementById('wrap');
+  const wrap   = document.getElementById('view-altitude');
   const cRect  = canvas.getBoundingClientRect();
   const wRect  = wrap.getBoundingClientRect();
   picker.style.left = (cRect.left - wRect.left + chart.chartArea.left) + 'px';
@@ -338,7 +432,6 @@ function togglePicker() {
   picker.style.display = 'block';
 }
 
-// Close picker when clicking outside
 document.addEventListener('click', e => {
   const picker = document.getElementById('picker');
   const canvas = document.getElementById('chart');
