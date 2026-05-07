@@ -9,6 +9,7 @@ User=root
 ExecStart=/opt/flighttracker/venv/bin/python /opt/flighttracker/feeder.py
 Restart=on-failure
 RestartSec=10
+Environment=PYTHONUNBUFFERED=1
 StandardOutput=journal
 StandardError=journal
 
