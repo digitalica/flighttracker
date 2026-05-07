@@ -13,4 +13,4 @@ ENV DB_PATH=/data/flighttracker.db
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--workers", "1", "--threads", "4", "--bind", "0.0.0.0:5000", "server:app"]
+CMD ["gunicorn", "--workers", "1", "--threads", "4", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "server:app"]
