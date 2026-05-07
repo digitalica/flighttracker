@@ -31,6 +31,7 @@ MAX_POINTS = 3000
 ALLOWED_IPS = {
     "45.83.241.206",   # desktop, public
     "100.111.194.45",  # desktop, tailscale
+    "80.57.68.254",    # feeder, skydive hilversum public ip
 }
 
 TARGET_AIRCRAFT = {
