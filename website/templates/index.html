@@ -11,6 +11,19 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { width: 100%; height: 100%; background: #0d0d0d; color: #ccc; font-family: monospace; }
 
+    /* ── Data status indicator ── */
+    #data-status {
+      position: fixed;
+      top: 14px;
+      left: 18px;
+      z-index: 100;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      letter-spacing: 0.03em;
+    }
+
     /* ── Hamburger ── */
     #hamburger {
       position: fixed;
@@ -80,6 +93,7 @@
 </head>
 <body>
 
+<div id="data-status"></div>
 <span id="hamburger">&#9776;</span>
 <div id="nav">
   <div id="nav-altitude" class="active" onclick="showView('altitude')">Altitude</div>
@@ -193,6 +207,27 @@ function buildSeries(data, key) {
     out.push({ x: new Date(data[i].t), y: data[i][key] });
   }
   return out;
+}
+
+function updateDataStatus() {
+  const timestamps = Object.values(statusMap).filter(Boolean).map(ts => new Date(ts));
+  const el = document.getElementById('data-status');
+  if (!timestamps.length) {
+    el.textContent = 'no data';
+    el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
+    return;
+  }
+  const ageSecs = (Date.now() - Math.max(...timestamps)) / 1000;
+  if (ageSecs <= 10) {
+    el.textContent = 'data ok';
+    el.style.cssText = 'background:#0d2a0d;color:#5c5;border-color:#1a4a1a';
+  } else if (ageSecs <= 60) {
+    el.textContent = 'slow data';
+    el.style.cssText = 'background:#2a2a0d;color:#cc5;border-color:#4a4a1a';
+  } else {
+    el.textContent = 'no data';
+    el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
+  }
 }
 
 function acStatus(h) {
@@ -394,6 +429,7 @@ async function refresh() {
   chart.options.scales.y2.max =  maxAbs;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
   chart.update('none');
+  updateDataStatus();
 }
 
 function togglePicker() {
