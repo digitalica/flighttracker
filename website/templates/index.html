@@ -47,7 +47,7 @@
 
     /* ── Views ── */
     #view-altitude { width: 100%; height: 100%; padding: 24px; position: relative; }
-    #view-about    { display: none; padding: 48px 32px; max-width: 640px; line-height: 1.7; }
+    #view-about    { display: none; height: 100%; overflow-y: auto; padding: 48px 32px; max-width: 640px; line-height: 1.7; }
     #view-about h1 { font-size: 18px; color: #ddd; margin-bottom: 20px; font-weight: normal; }
     #view-about p  { font-size: 13px; color: #aaa; margin-bottom: 14px; }
     #view-about a  { color: #4a9eff; text-decoration: none; }
@@ -117,8 +117,8 @@
 <script>
 // ── View switching ────────────────────────────────────────────────────────────
 function showView(name) {
-  document.getElementById('view-altitude').style.display = name === 'altitude' ? '' : 'none';
-  document.getElementById('view-about').style.display    = name === 'about'    ? '' : 'none';
+  document.getElementById('view-altitude').style.display = name === 'altitude' ? 'block' : 'none';
+  document.getElementById('view-about').style.display    = name === 'about'    ? 'block' : 'none';
   document.getElementById('nav-altitude').className = name === 'altitude' ? 'active' : '';
   document.getElementById('nav-about').className    = name === 'about'    ? 'active' : '';
   document.getElementById('nav').style.display = 'none';
