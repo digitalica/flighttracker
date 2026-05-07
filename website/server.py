@@ -90,6 +90,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
 _last_seen: dict[str, datetime] = {}              # hex -> last seen (UTC)
 _last_alt:  dict[str, tuple[datetime, int]] = {}  # hex -> (ts, altitude_ft)
+_last_post: datetime | None = None               # last POST /sbs received (UTC)
 _lock = threading.Lock()
 
 MAX_CLIMB_RATE = 1000  # ft/s — readings exceeding this are dropped as outliers
@@ -300,10 +301,13 @@ def _find_session_start(icao_hex: str) -> str | None:
 
 @app.route("/sbs", methods=["POST"])
 def ingest():
+    global _last_post
     if request.remote_addr not in ALLOWED_IPS:
         return jsonify({"error": "forbidden"}), 403
     data = request.get_json(silent=True) or {}
     messages = data.get("messages", [])
+    with _lock:
+        _last_post = datetime.now(timezone.utc)
     parsed, aircraft = _ingest(messages)
     log.info(f"ingest: {len(messages)} received, {parsed} parsed, {aircraft} aircraft")
     return jsonify({"ok": True, "count": len(messages)})
@@ -325,7 +329,12 @@ def status():
             "SELECT icao_hex, MAX(ts) AS last_seen FROM readings GROUP BY icao_hex"
         ).fetchall()
     seen = {r["icao_hex"]: r["last_seen"] for r in rows}
-    return jsonify({h: seen.get(h) for h in TARGET_AIRCRAFT})
+    with _lock:
+        last_post = _last_post.isoformat() if _last_post else None
+    return jsonify({
+        "last_post": last_post,
+        "aircraft": {h: seen.get(h) for h in TARGET_AIRCRAFT},
+    })
 
 
 @app.route("/api/altitude/<icao_hex>")

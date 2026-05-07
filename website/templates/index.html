@@ -156,6 +156,7 @@ const DEF_HEX = '484763'; // PH-TGC
 
 let aircraft     = [];
 let statusMap    = {};
+let lastPost     = null;
 let sessionStart = null;
 let hex          = DEF_HEX;
 let mins         = 30;
@@ -210,14 +211,13 @@ function buildSeries(data, key) {
 }
 
 function updateDataStatus() {
-  const timestamps = Object.values(statusMap).filter(Boolean).map(ts => new Date(ts));
   const el = document.getElementById('data-status');
-  if (!timestamps.length) {
+  if (!lastPost) {
     el.textContent = 'no data';
     el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
     return;
   }
-  const ageSecs = (Date.now() - Math.max(...timestamps)) / 1000;
+  const ageSecs = (Date.now() - lastPost) / 1000;
   if (ageSecs <= 10) {
     el.textContent = 'data ok';
     el.style.cssText = 'background:#0d2a0d;color:#5c5;border-color:#1a4a1a';
@@ -414,7 +414,8 @@ async function refresh() {
     fetch('/api/status').then(r => r.json()),
   ]);
 
-  statusMap    = newStatus;
+  statusMap    = newStatus.aircraft;
+  lastPost     = newStatus.last_post ? new Date(newStatus.last_post) : null;
   sessionStart = resp.session_start ? new Date(resp.session_start) : null;
   const data   = resp.points;
 

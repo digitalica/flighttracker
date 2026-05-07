@@ -103,21 +103,28 @@ def read_sbs():
         time.sleep(RECONNECT_DELAY)
 
 
+HEARTBEAT_INTERVAL = 30  # seconds between heartbeat POSTs when buffer is empty
+
 def send_loop():
     """Drain the buffer periodically and POST batches to the server."""
+    last_send = 0.0
     while True:
         time.sleep(SEND_INTERVAL)
         with _lock:
-            if not _buffer:
-                continue
             batch = []
             while _buffer and len(batch) < BATCH_MAX:
                 batch.append(_buffer.popleft())
 
+        now = time.monotonic()
+        if not batch and (now - last_send) < HEARTBEAT_INTERVAL:
+            continue
+
         try:
             resp = requests.post(SERVER_URL, json={"messages": batch}, timeout=10)
             resp.raise_for_status()
-            log.info(f"Sent {len(batch)} messages -> HTTP {resp.status_code}")
+            last_send = time.monotonic()
+            if batch:
+                log.info(f"Sent {len(batch)} messages -> HTTP {resp.status_code}")
         except requests.exceptions.RequestException as exc:
             log.warning(f"Failed to send batch: {exc}")
             # Put messages back so they are not lost
