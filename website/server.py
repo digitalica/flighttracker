@@ -13,8 +13,10 @@ GET  /api/altitude/<hex>     Altitude time-series (?minutes=30)
 GET  /                       Frontend
 """
 
+import logging
 import os
 import sqlite3
+import sys
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
@@ -22,6 +24,13 @@ from pathlib import Path
 import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+log = logging.getLogger(__name__)
 
 DB_PATH = Path(os.environ.get("DB_PATH", Path(__file__).parent / "flighttracker.db"))
 STALE_SECONDS = 120
@@ -175,10 +184,12 @@ def _parse_sbs_line(line: str) -> dict | None:
 # Ingest
 # ---------------------------------------------------------------------------
 
-def _ingest(messages: list[str]) -> None:
+def _ingest(messages: list[str]) -> tuple[int, int]:
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
     db_rows: list[tuple] = []
+    parsed_count = 0
+    seen_aircraft: set[str] = set()
 
     with _lock:
         for line in messages:
@@ -192,7 +203,9 @@ def _ingest(messages: list[str]) -> None:
             if altitude is None and (lat is None or lon is None):
                 continue
 
+            parsed_count += 1
             hex_code = parsed["hex"]
+            seen_aircraft.add(hex_code)
 
             if altitude is not None:
                 prev = _last_alt.get(hex_code)
@@ -217,7 +230,7 @@ def _ingest(messages: list[str]) -> None:
             ))
 
     if not db_rows:
-        return
+        return 0, 0
 
     with _db() as conn:
         for row in db_rows:
@@ -232,6 +245,8 @@ def _ingest(messages: list[str]) -> None:
                     " VALUES (?,?,?,?,?,?)",
                     row[1:],
                 )
+
+    return parsed_count, len(seen_aircraft)
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +304,8 @@ def ingest():
         return jsonify({"error": "forbidden"}), 403
     data = request.get_json(silent=True) or {}
     messages = data.get("messages", [])
-    _ingest(messages)
+    parsed, aircraft = _ingest(messages)
+    log.info(f"ingest: {len(messages)} received, {parsed} parsed, {aircraft} aircraft")
     return jsonify({"ok": True, "count": len(messages)})
 
 
