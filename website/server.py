@@ -91,7 +91,10 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 _last_seen: dict[str, datetime] = {}              # hex -> last seen (UTC)
 _last_alt:  dict[str, tuple[datetime, int]] = {}  # hex -> (ts, altitude_ft)
 _last_post: datetime | None = None               # last POST /sbs received (UTC)
+_visitors:  dict[str, datetime] = {}             # ip -> last seen (UTC)
 _lock = threading.Lock()
+
+VISITOR_TIMEOUT = 60  # seconds before a visitor is considered inactive
 
 MAX_CLIMB_RATE = 1000  # ft/s — readings exceeding this are dropped as outliers
 
@@ -324,15 +327,20 @@ def list_aircraft():
 
 @app.route("/api/status")
 def status():
+    now = datetime.now(timezone.utc)
+    with _lock:
+        _visitors[request.remote_addr] = now
+        cutoff = now.timestamp() - VISITOR_TIMEOUT
+        active = sum(1 for t in _visitors.values() if t.timestamp() >= cutoff)
+        last_post = _last_post.isoformat() if _last_post else None
     with _db() as conn:
         rows = conn.execute(
             "SELECT icao_hex, MAX(ts) AS last_seen FROM readings GROUP BY icao_hex"
         ).fetchall()
     seen = {r["icao_hex"]: r["last_seen"] for r in rows}
-    with _lock:
-        last_post = _last_post.isoformat() if _last_post else None
     return jsonify({
         "last_post": last_post,
+        "active_users": active,
         "aircraft": {h: seen.get(h) for h in TARGET_AIRCRAFT},
     })
 

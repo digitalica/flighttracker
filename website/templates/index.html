@@ -24,6 +24,21 @@
       letter-spacing: 0.03em;
     }
 
+    /* ── User count indicator ── */
+    #user-count {
+      position: fixed;
+      top: 42px;
+      left: 18px;
+      z-index: 100;
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 3px;
+      border: 1px solid #333;
+      background: #1a1a1a;
+      color: #888;
+      letter-spacing: 0.03em;
+    }
+
     /* ── Hamburger ── */
     #hamburger {
       position: fixed;
@@ -94,6 +109,7 @@
 <body>
 
 <div id="data-status"></div>
+<div id="user-count"></div>
 <span id="hamburger">&#9776;</span>
 <div id="nav">
   <div id="nav-altitude" class="active" onclick="showView('altitude')">Altitude</div>
@@ -416,6 +432,8 @@ async function refresh() {
 
   statusMap    = newStatus.aircraft;
   lastPost     = newStatus.last_post ? new Date(newStatus.last_post) : null;
+  document.getElementById('user-count').textContent =
+    newStatus.active_users === 1 ? '1 user' : `${newStatus.active_users} users`;
   sessionStart = resp.session_start ? new Date(resp.session_start) : null;
   const data   = resp.points;
 
