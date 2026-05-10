@@ -170,7 +170,7 @@ def _parse_sbs_line(line: str) -> dict | None:
 
     result: dict = {"hex": hex_code.lower(), "msg_type": msg_type}
 
-    if msg_type in ("2", "3", "5"):
+    if msg_type in ("2", "3", "7"):
         result["altitude"] = get(SBS_IDX["altitude"], int)
     if msg_type in ("2", "3"):
         result["lat"] = get(SBS_IDX["lat"], float)
