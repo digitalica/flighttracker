@@ -87,6 +87,7 @@ website/
 tools/
   export.py                     # CLI CSV export tool (DB_PATH env var or default)
   copydata.py                   # Copy one day's readings to today (for testing)
+  cleartoday.py                 # Delete all readings and AGL offsets for today
 
 docker-compose.yml              # brings up the website container
   flighttracker.db              # SQLite database (created on first run, not in git)
