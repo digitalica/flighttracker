@@ -82,8 +82,11 @@ website/
   requirements.txt              # flask, gunicorn
   Dockerfile                    # single-container deployment
   .dockerignore
-  export.py                     # CLI CSV export tool
   INSTALL.md                    # server install steps
+
+tools/
+  export.py                     # CLI CSV export tool (DB_PATH env var or default)
+  copydata.py                   # Copy one day's readings to today (for testing)
 
 docker-compose.yml              # brings up the website container
   flighttracker.db              # SQLite database (created on first run, not in git)

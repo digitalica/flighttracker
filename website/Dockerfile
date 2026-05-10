@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY server.py export.py ./
+COPY server.py ./
 COPY templates/ templates/
 COPY static/ static/
 

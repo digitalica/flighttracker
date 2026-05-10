@@ -26,12 +26,13 @@ python export.py --date 2026-04-30 --out data.csv
 
 import argparse
 import csv
+import os
 import sqlite3
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "flighttracker.db"
+DB_PATH = Path(os.environ.get("DB_PATH", Path(__file__).parent.parent / "website" / "flighttracker.db"))
 
 TARGET_AIRCRAFT = {
     "484763": "PH-TGC",
@@ -62,6 +63,8 @@ TARGET_AIRCRAFT = {
     "485e08": "PH-4T7",
     "484bf9": "PH-GIN",
     "48462e": "PH-MFT",
+    "a8b0a3": "N65909",
+    "3ecadc": "D-KRUA",
 }
 
 # Reverse map: registration (lowercase) -> hex
@@ -112,7 +115,7 @@ def export(date_str: str | None, hex_filter: str | None, out):
     conn.close()
 
     def to_calc(ts: str) -> str:
-        """Convert ISO timestamp to YYYY-MM-DD HH:MM:SS (UTC) for LibreOffice Calc."""
+        """Convert ISO timestamp to YYYY-MM-DD HH:MM:SS.mmm (UTC) for LibreOffice Calc."""
         try:
             return datetime.fromisoformat(ts).astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         except ValueError:
