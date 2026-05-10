@@ -38,6 +38,7 @@ MAX_POINTS = 3000
 
 # IPs allowed to call /sbs (feeder) and /db (backup download)
 ALLOWED_IPS = {
+    "127.0.0.1",       # localhost
     "45.83.241.206",   # desktop, public
     "100.111.194.45",  # desktop, tailscale
     "80.57.68.254",    # feeder, skydive hilversum public ip
@@ -79,6 +80,8 @@ TARGET_AIRCRAFT = {
 SBS_IDX = {
     "msg_type":  1,
     "hex":       4,
+    "date_gen":  6,
+    "time_gen":  7,
     "altitude": 11,
     "lat":      14,
     "lon":      15,
@@ -170,7 +173,19 @@ def _parse_sbs_line(line: str) -> dict | None:
 
     result: dict = {"hex": hex_code.lower(), "msg_type": msg_type}
 
-    if msg_type in ("2", "3", "7"):
+    date_str = get(SBS_IDX["date_gen"])
+    time_str = get(SBS_IDX["time_gen"])
+    if date_str and time_str:
+        for fmt in ("%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
+            try:
+                result["ts"] = datetime.strptime(
+                    f"{date_str} {time_str}", fmt
+                ).replace(tzinfo=timezone.utc)
+                break
+            except ValueError:
+                pass
+
+    if msg_type in ("2", "3", "5", "7"):
         result["altitude"] = get(SBS_IDX["altitude"], int)
     if msg_type in ("2", "3"):
         result["lat"] = get(SBS_IDX["lat"], float)
@@ -190,7 +205,6 @@ def _parse_sbs_line(line: str) -> dict | None:
 
 def _ingest(messages: list[str]) -> tuple[int, int]:
     now = datetime.now(timezone.utc)
-    now_iso = now.isoformat()
     db_rows: list[tuple] = []
     parsed_count = 0
     seen_aircraft: set[str] = set()
@@ -210,26 +224,27 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             parsed_count += 1
             hex_code = parsed["hex"]
             seen_aircraft.add(hex_code)
+            msg_ts = parsed.get("ts") or now
 
             if altitude is not None:
                 prev = _last_alt.get(hex_code)
-                new_session = prev is None or (now - prev[0]).total_seconds() > STALE_SECONDS
+                new_session = prev is None or (msg_ts - prev[0]).total_seconds() > STALE_SECONDS
 
                 # Outlier filter: drop readings that imply an impossible climb/descent rate
                 if not new_session:
                     prev_ts, prev_alt = prev
-                    dt = (now - prev_ts).total_seconds()
+                    dt = (msg_ts - prev_ts).total_seconds()
                     if dt >= 1 and abs(altitude - prev_alt) / dt > MAX_CLIMB_RATE:
                         continue
 
-                _last_alt[hex_code] = (now, altitude)
+                _last_alt[hex_code] = (msg_ts, altitude)
 
                 if new_session and -500 <= altitude <= 500:
-                    db_rows.append(("offset", hex_code, now_iso, altitude))
+                    db_rows.append(("offset", hex_code, msg_ts.isoformat(), altitude))
 
-            _last_seen[hex_code] = now
+            _last_seen[hex_code] = msg_ts
             db_rows.append((
-                "reading", hex_code, now_iso, altitude,
+                "reading", hex_code, msg_ts.isoformat(), altitude,
                 lat, lon, parsed.get("on_ground"),
             ))
 

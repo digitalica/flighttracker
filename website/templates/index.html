@@ -373,7 +373,6 @@ function buildChart() {
           grid: { color: '#1a1a1a' },
         },
         y: {
-          min: 0,
           title: { display: true, text: yLabel(), color: '#4a9eff', font: { size: 11, family: 'monospace' } },
           ticks: { color: '#4a9eff', font: { family: 'monospace', size: 11 } },
           grid: { color: '#1a1a1a' },
@@ -444,6 +443,8 @@ async function refresh() {
   chart._gapRanges = findGaps(data);
   chart.options.scales.x.min = new Date(now - mins * 60 * 1000);
   chart.options.scales.x.max = now;
+  const altVals = data.map(d => d[key]).filter(v => v != null);
+  chart.options.scales.y.min = altVals.length && altVals.every(v => v >= 0) ? 0 : undefined;
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
   chart.options.scales.y2.min = -maxAbs;
   chart.options.scales.y2.max =  maxAbs;
