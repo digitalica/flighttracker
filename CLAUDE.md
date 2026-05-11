@@ -51,6 +51,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 485E08   | PH-4T7       | TL Ultralight TL-3000 Sirius| ultralight                   |
 | 484BF9   | PH-GIN       | Fuji FA-200-180 Aero Subaru |                              |
 | 48462E   | PH-MFT       | Diamond DV20 Katana         |                              |
+| 48487E   | PH-2X3       | TL TL-232 Condor            | ultralight                   |
 | A8B0A3   | N65909       | Cessna 172 Skyhawk (1983)   | US registration              |
 | 3ECADC   | D-KRUA       | Schleicher ASG-29           | glider, German               |
 
