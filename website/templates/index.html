@@ -42,14 +42,15 @@
     /* ── Hamburger ── */
     #hamburger {
       position: fixed;
-      top: 14px;
-      right: 18px;
+      top: 6px;
+      right: 10px;
       z-index: 100;
       cursor: pointer;
       font-size: 22px;
       color: #888;
       user-select: none;
       line-height: 1;
+      padding: 8px 10px;
     }
     #hamburger:hover { color: #ddd; }
 
@@ -76,7 +77,8 @@
     /* ── Views ── */
     #view-altitude { width: 100%; height: 100%; padding: 24px; position: relative; }
     #view-events   { display: none; height: 100%; overflow-y: auto; padding: 48px 32px; }
-    #view-about    { display: none; height: 100%; overflow-y: auto; padding: 48px 32px; max-width: 640px; line-height: 1.7; }
+    #view-about    { display: none; height: 100%; overflow-y: auto; padding: 80px 32px 48px; line-height: 1.7; }
+    #view-about > * { max-width: 640px; margin-left: auto; margin-right: auto; }
     #view-about h1 { font-size: 18px; color: #ddd; margin-bottom: 20px; font-weight: normal; }
     #view-about p  { font-size: 13px; color: #aaa; margin-bottom: 14px; }
     #view-about a  { color: #4a9eff; text-decoration: none; }
@@ -540,7 +542,8 @@ function buildChart() {
     const y = e.clientY - rect.top;
     const ca = chart.chartArea;
     if (!ca) return;
-    if (y < ca.top) {
+    const titleBottom = (chart.subtitleBlock ?? chart.titleBlock)?.bottom ?? ca.top;
+    if (y >= (chart.titleBlock?.top ?? 0) && y <= titleBottom) {
       togglePicker();
     } else if (x > ca.right && y >= ca.top && y <= ca.bottom) {
       useAGL = !useAGL;
@@ -562,7 +565,8 @@ function buildChart() {
     const y = e.clientY - rect.top;
     const ca = chart.chartArea;
     if (!ca) return;
-    const hot = y < ca.top
+    const _titleBottom = (chart.subtitleBlock ?? chart.titleBlock)?.bottom ?? ca.top;
+    const hot = (y >= (chart.titleBlock?.top ?? 0) && y <= _titleBottom)
       || (x > ca.right && y >= ca.top && y <= ca.bottom)
       || (y > ca.bottom && x >= ca.left && x <= ca.right);
     canvas.style.cursor = hot ? 'pointer' : 'default';
