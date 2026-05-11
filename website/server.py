@@ -33,7 +33,8 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DB_PATH = Path(os.environ.get("DB_PATH", Path(__file__).parent / "flighttracker.db"))
-STALE_SECONDS = 120
+STALE_SECONDS   = 120
+INACTIVE_SECS   = 30
 MAX_POINTS = 3000
 
 # IPs allowed to call /sbs (feeder) and /db (backup download)
@@ -312,9 +313,14 @@ def _detect_events(rows, agl_offset: int) -> list[dict]:
     events = []
     states = [None] * len(THRESHOLDS)  # None=unknown, True=above, False=below
     descent_fired = False  # suppress extra descending events once one has fired
+    if rows:
+        events.append({"type": "active", "ts": rows[0]["ts"]})
     for i, row in enumerate(rows):
         if i > 0:
             dt = (datetime.fromisoformat(row["ts"]) - datetime.fromisoformat(rows[i - 1]["ts"])).total_seconds()
+            if dt > INACTIVE_SECS:
+                events.append({"type": "inactive", "ts": rows[i - 1]["ts"]})
+                events.append({"type": "active",   "ts": row["ts"]})
             if dt > STALE_SECONDS:
                 states = [None] * len(THRESHOLDS)
                 descent_fired = False
@@ -336,6 +342,10 @@ def _detect_events(rows, agl_offset: int) -> list[dict]:
                 if up_name == "takeoff":
                     descent_fired = False
                 states[j] = True
+    if rows:
+        last_dt = (datetime.now(timezone.utc) - datetime.fromisoformat(rows[-1]["ts"])).total_seconds()
+        if last_dt > INACTIVE_SECS:
+            events.append({"type": "inactive", "ts": rows[-1]["ts"]})
     return events
 
 

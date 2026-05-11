@@ -103,10 +103,12 @@
     #events-list { font-size: 13px; }
     #events-list table { border-collapse: collapse; }
     #events-list td { padding: 5px 20px 5px 0; color: #aaa; }
-    #events-list .ev-takeoff { color: #5c5; }
-    #events-list .ev-landing { color: #fa4; }
-    #events-list .ev-climb   { color: #4a9eff; }
-    #events-list .ev-desc    { color: #888; }
+    #events-list .ev-takeoff  { color: #5c5; }
+    #events-list .ev-landing  { color: #fa4; }
+    #events-list .ev-climb    { color: #4a9eff; }
+    #events-list .ev-desc     { color: #888; }
+    #events-list .ev-active   { color: #5c5; }
+    #events-list .ev-inactive { color: #555; }
     #events-list .ev-dur     { color: #555; }
 
     /* ── Aircraft picker (fixed, shared between views) ── */
@@ -197,6 +199,7 @@ let hex          = DEF_HEX;
 let mins         = 30;
 let useAGL       = false;
 let chart        = null;
+let lastRoc      = 0;
 let currentView  = 'altitude';
 
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
@@ -326,7 +329,7 @@ function toggleEventsPicker() {
   const picker = document.getElementById('picker');
   if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
   _buildPickerContent(() => {
-    document.getElementById('events-title').textContent = reg();
+    lastRoc = 0;
     refreshEvents();
   });
   const anchor = document.getElementById('events-title');
@@ -569,17 +572,15 @@ async function refresh() {
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
   chart.options.scales.y2.min = -maxAbs;
   chart.options.scales.y2.max =  maxAbs;
-  const lastRoc = data.length ? data[data.length - 1].roc : 0;
+  lastRoc       = data.length ? data[data.length - 1].roc : 0;
   const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
   chart.options.plugins.title.text    = reg() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
   chart.update('none');
   updateDataStatus();
 
-  if (currentView === 'events') {
-    document.getElementById('events-title').textContent    = reg() + arrow;
-    document.getElementById('events-subtitle').textContent = lastSeenLabel(hex);
-  }
+  document.getElementById('events-title').textContent    = reg() + arrow;
+  document.getElementById('events-subtitle').textContent = lastSeenLabel(hex);
 }
 
 // ── Events view ───────────────────────────────────────────────────────────────
@@ -591,12 +592,14 @@ function durStr(ms) {
 }
 
 const EV_LABEL = {
-  takeoff:         { icon: '↑', label: 'takeoff',              cls: 'ev-takeoff' },
-  landing:         { icon: '↓', label: 'landing',              cls: 'ev-landing' },
-  climbing_3000:   { icon: '↑', label: 'approaching 3500 ft',  cls: 'ev-climb'   },
-  climbing_5500:   { icon: '↑', label: 'approaching 6000 ft',  cls: 'ev-climb'   },
+  takeoff:         { icon: '↑', label: 'takeoff',              cls: 'ev-takeoff'  },
+  landing:         { icon: '↓', label: 'landing',              cls: 'ev-landing'  },
+  climbing_3000:   { icon: '↑', label: 'approaching 3500 ft',  cls: 'ev-climb'    },
+  climbing_5500:   { icon: '↑', label: 'approaching 6000 ft',  cls: 'ev-climb'    },
   descending_3000: { icon: '↓', label: 'descending (thru 3000 ft)', cls: 'ev-desc' },
   descending_5500: { icon: '↓', label: 'descending (thru 5500 ft)', cls: 'ev-desc' },
+  active:          { icon: '●', label: 'signal',               cls: 'ev-active'   },
+  inactive:        { icon: '○', label: 'signal lost',          cls: 'ev-inactive' },
 };
 
 function relTime(t) {
@@ -660,10 +663,19 @@ function natoSuffix() {
 const announcedEvents = new Set();
 let eventsInitialized = false;
 
+// Pre-load voices so they're available on first speak()
+if (window.speechSynthesis) window.speechSynthesis.getVoices();
+if (window.speechSynthesis) window.speechSynthesis.addEventListener('voiceschanged', () => window.speechSynthesis.getVoices());
+
 function speak(text) {
   if (!window.speechSynthesis) return;
+  const utter = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  const female = voices.find(v => /female|woman|zira|samantha|karen|moira|fiona|victoria|tessa|alice|amelie|anna|emma|sara|susan/i.test(v.name))
+              || voices.find(v => v.name.toLowerCase().includes('f') && v.lang.startsWith('en'));
+  if (female) utter.voice = female;
   window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  window.speechSynthesis.speak(utter);
 }
 
 function testSpeech() {
