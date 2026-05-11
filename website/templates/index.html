@@ -603,6 +603,7 @@ async function refresh() {
   const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
   chart.options.plugins.title.text    = reg() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
+  document.title = `${reg()} FlightTracker`;
   chart.update('none');
   updateDataStatus();
 
