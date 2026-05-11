@@ -165,14 +165,21 @@
 <div id="view-about">
   <h1>PHTGC FlightTracker</h1>
   <p>
-    Personal project that tracks a small fleet of aircraft using an ADS-B receiver.
-    An ADS-B feeder (adsb.im / ultrafeeder) streams transponder messages over SBS TCP,
-    which are forwarded here and stored in a SQLite database.
-    The altitude graph updates every 5 seconds.
+    Personal project that tracks the PH-TGC (and for testing some other EHHV based aircraft)
+    using an ADS-B receiver. The goal is to quickly and reliably see the altitude of PH-TGC.
+    And have more accurate information at Skydive Hilversum.
+  </p>
+  <p>
+    The altitude graph updates every 5 seconds. The Event page does too, and will use voice
+    to announce events like takeoff, reaching altitude and landing.
+  </p>
+  <p>
+    The source is an ADS-B feeder (adsb.im / ultrafeeder) located at EHHV, that also feeds to
+    https://globe.adsbexchange.com (so that will have more accurate information around EHHV too)
   </p>
   <p>
     <table>
-      <tr><th>Stack</th><td>Python · Flask · Chart.js · SQLite · Docker · Traefik</td></tr>
+      <tr><th>Stack</th><td>Python · Flask · Chart.js · SQLite · Docker</td></tr>
       <tr><th>Source</th><td><a href="https://github.com/digitalica/flighttracker" target="_blank">github.com/digitalica/flighttracker</a></td></tr>
     </table>
   </p>
@@ -182,6 +189,10 @@
     Click the <i>Y-axis label</i> to toggle barometric ↔ AGL altitude.<br>
     Click the <i>X-axis label</i> to cycle through time ranges (30 min → 16 h).<br>
     Red-shaded bands indicate periods without ADS-B reception (&gt; 60 s gap).
+  </p>
+  <p>
+    <b>Questions or more information</b><br>
+    Feel free to contact Robbert via info@digitalica.nl
   </p>
 </div>
 
