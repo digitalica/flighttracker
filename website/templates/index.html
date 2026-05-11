@@ -196,6 +196,7 @@ let statusMap     = {};
 let lastPost      = null;
 let sessionStart  = null;
 let lastTakeoffTs = null;
+let lastAgl       = null;
 let hex           = DEF_HEX;
 let mins          = 30;
 let useAGL        = false;
@@ -261,13 +262,15 @@ function flightTimeStr(startDate) {
 function lastSeenLabel(h) {
   const s = acStatus(h);
   if (s === 'active') {
-    const ft = lastTakeoffTs ? `, ${flightTimeStr(lastTakeoffTs)} flight time` : '';
-    return `now${ft}`;
+    const ft  = lastTakeoffTs ? `, ${flightTimeStr(lastTakeoffTs)}` : '';
+    const alt = lastAgl != null ? `  ${lastAgl} ft AGL` : '';
+    return `now${ft}${alt}`;
   }
   if (s === 'inactive') return 'not today';
   const diffMs = Date.now() - new Date(statusMap[h]);
   const mins = Math.floor(diffMs / 60_000);
-  return mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)} h ago`;
+  const alt  = lastAgl != null ? `  ${lastAgl} ft AGL` : '';
+  return (mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)} h ago`) + alt;
 }
 
 function updateDataStatus() {
@@ -305,6 +308,7 @@ function _buildPickerContent(onSelect) {
       announcedEvents.clear();
       eventsInitialized = false;
       lastTakeoffTs = null;
+      lastAgl       = null;
       picker.style.display = 'none';
       onSelect();
     });
@@ -583,7 +587,8 @@ async function refresh() {
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
   chart.options.scales.y.min = -maxAbs;
   chart.options.scales.y.max =  maxAbs;
-  lastRoc       = data.length ? data[data.length - 1].roc : 0;
+  lastRoc       = data.length ? data[data.length - 1].roc  : 0;
+  lastAgl       = data.length ? data[data.length - 1].agl  : null;
   const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
   chart.options.plugins.title.text    = reg() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);

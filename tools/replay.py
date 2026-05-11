@@ -190,7 +190,7 @@ def main():
             resp.raise_for_status()
             sent += len(batch)
             last_post_wall = _time.monotonic()
-            print(f"\r  batch {batch_idx + 1}/{len(batches)}  {sent}/{len(valid)} msgs sent   ",
+            print(f"\r  batch {batch_idx + 1}/{len(batches)}  {sent}/{len(valid)} msgs sent  (line {sent})   ",
                   end="", flush=True)
         except requests.exceptions.RequestException as exc:
             errors += 1
