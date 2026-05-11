@@ -260,6 +260,31 @@ def _compute_roc(rows, window_secs: int = 60) -> list[int]:
     return result
 
 
+def _filter_altitude_outliers(rows, max_rate_ft_per_min: int = 5000) -> list:
+    """Drop rows where altitude implies an impossible rate vs all available neighbors.
+
+    A point is an outlier only when every neighbor exceeds the threshold, so a
+    single spike is removed without also flagging the points on either side of it.
+    """
+    if len(rows) < 2:
+        return list(rows)
+    times = [datetime.fromisoformat(r["ts"]).timestamp() for r in rows]
+    alts  = [r["alt_baro"] for r in rows]
+    n = len(rows)
+    keep = [True] * n
+    for i in range(n):
+        rates = []
+        for j in (i - 1, i + 1):
+            if j < 0 or j >= n:
+                continue
+            dt = abs(times[i] - times[j])
+            if dt >= 1:
+                rates.append(abs(alts[i] - alts[j]) / dt * 60)
+        if rates and all(r > max_rate_ft_per_min for r in rates):
+            keep[i] = False
+    return [r for r, k in zip(rows, keep) if k]
+
+
 def _find_session_start(icao_hex: str) -> str | None:
     """Return the timestamp of the first reading in the current flight session."""
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
@@ -350,6 +375,7 @@ def altitude(icao_hex: str):
             (icao_hex, since),
         ).fetchall()
 
+    rows = _filter_altitude_outliers(rows)
     step = max(1, len(rows) // MAX_POINTS)
     rows = rows[::step]
 

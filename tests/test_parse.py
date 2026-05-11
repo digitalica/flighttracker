@@ -1,15 +1,4 @@
-import os
-import sys
-import tempfile
-from pathlib import Path
-
-# Redirect DB_PATH so importing server doesn't touch the real database
-_tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_tmp.close()
-os.environ["DB_PATH"] = _tmp.name
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "website"))
-from server import _parse_sbs_line  # noqa: E402
+from server import _parse_sbs_line
 
 
 # Lines that carry no altitude and no position — should return None
