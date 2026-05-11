@@ -298,6 +298,8 @@ function _buildPickerContent(onSelect) {
   picker.querySelectorAll('div').forEach(div => {
     div.addEventListener('click', () => {
       hex = div.dataset.hex;
+      announcedEvents.clear();
+      eventsInitialized = false;
       picker.style.display = 'none';
       onSelect();
     });
@@ -656,6 +658,7 @@ function natoSuffix() {
 }
 
 const announcedEvents = new Set();
+let eventsInitialized = false;
 
 function speak(text) {
   if (!window.speechSynthesis) return;
@@ -700,9 +703,10 @@ async function refreshEvents() {
     }
     if (!announcedEvents.has(ev.ts)) {
       announcedEvents.add(ev.ts);
-      if (announcedEvents.size > 1) speakEvent(ev);
+      if (eventsInitialized) speakEvent(ev);
     }
   }
+  eventsInitialized = true;
 
   renderEvents(resp.events, resp.agl_offset);
 }

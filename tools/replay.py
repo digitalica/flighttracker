@@ -30,6 +30,7 @@ DEFAULT_FILE         = Path(__file__).parent.parent / "testdata" / "tgc20260509.
 DEFAULT_URL          = "http://localhost:5000/sbs"
 BATCH_SIZE           = 50
 REALTIME_WINDOW_SECS = 1  # group messages into 1-second buckets to mimic the feeder
+HEARTBEAT_INTERVAL   = 2  # send empty POST at most every N seconds when idle
 
 
 def is_valid(line: str) -> bool:
@@ -156,19 +157,34 @@ def main():
     sent = 0
     errors = 0
     start_wall = _time.monotonic()
+    last_post_wall = -HEARTBEAT_INTERVAL  # allow immediate first heartbeat if needed
 
-    for batch_ts, batch in batches:
+    for batch_idx, (batch_ts, batch) in enumerate(batches):
         if args.realtime and first_ts and batch_ts:
-            target    = (batch_ts - first_ts).total_seconds()
-            sleep_for = target - (_time.monotonic() - start_wall)
-            if sleep_for > 0:
-                _time.sleep(sleep_for)
+            target = (batch_ts - first_ts).total_seconds()
+            while True:
+                remaining = target - (_time.monotonic() - start_wall)
+                if remaining <= 0:
+                    break
+                since_last = _time.monotonic() - last_post_wall
+                if since_last >= HEARTBEAT_INTERVAL:
+                    try:
+                        requests.post(args.url, json={"messages": []}, timeout=10)
+                        last_post_wall = _time.monotonic()
+                    except requests.exceptions.RequestException:
+                        pass
+                    remaining = target - (_time.monotonic() - start_wall)
+                    print(f"\r  heartbeat  (next batch in {remaining:.0f}s, {sent}/{len(valid)} msgs sent)   ",
+                          end="", flush=True)
+                _time.sleep(min(HEARTBEAT_INTERVAL, max(0, remaining)))
 
         try:
             resp = requests.post(args.url, json={"messages": batch}, timeout=10)
             resp.raise_for_status()
             sent += len(batch)
-            print(f"\r  {sent}/{len(valid)} messages sent", end="", flush=True)
+            last_post_wall = _time.monotonic()
+            print(f"\r  batch {batch_idx + 1}/{len(batches)}  {sent}/{len(valid)} msgs sent   ",
+                  end="", flush=True)
         except requests.exceptions.RequestException as exc:
             errors += 1
             print(f"\nBatch failed: {exc}", file=sys.stderr)

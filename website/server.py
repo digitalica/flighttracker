@@ -287,11 +287,12 @@ def _filter_altitude_outliers(rows, max_rate_ft_per_min: int = 5000) -> list:
 
 def _compute_agl_offset(rows) -> int:
     """Compute ground offset in ft by averaging all rows at the two lowest altitude values,
-    rounded to the nearest 100 ft."""
-    if not rows:
+    rounded to the nearest 100 ft. Only altitudes below 1000 ft are considered."""
+    candidates = [r["alt_baro"] for r in rows if r["alt_baro"] < 1000]
+    if not candidates:
         return 0
-    two_lowest = sorted(set(r["alt_baro"] for r in rows))[:2]
-    matching = [r["alt_baro"] for r in rows if r["alt_baro"] in two_lowest]
+    two_lowest = sorted(set(candidates))[:2]
+    matching = [a for a in candidates if a in two_lowest]
     return round(sum(matching) / len(matching) / 100) * 100
 
 
