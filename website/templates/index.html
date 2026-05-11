@@ -427,7 +427,7 @@ function buildChart() {
     data: {
       datasets: [
         {
-          yAxisID: 'y',
+          yAxisID: 'y2',
           data: [],
           borderColor: '#4a9eff',
           borderWidth: 1.5,
@@ -437,7 +437,7 @@ function buildChart() {
           spanGaps: false,
         },
         {
-          yAxisID: 'y2',
+          yAxisID: 'y',
           data: [],
           borderColor: '#666',
           borderWidth: 1,
@@ -500,15 +500,15 @@ function buildChart() {
           grid: { color: '#1a1a1a' },
         },
         y: {
-          title: { display: true, text: yLabel(), color: '#4a9eff', font: { size: 11, family: 'monospace' } },
-          ticks: { color: '#4a9eff', font: { family: 'monospace', size: 11 } },
-          grid: { color: '#1a1a1a' },
-        },
-        y2: {
-          position: 'right',
           title: { display: true, text: 'ft/min', color: '#666', font: { size: 11, family: 'monospace' } },
           ticks: { color: '#666', font: { family: 'monospace', size: 11 } },
           grid: { drawOnChartArea: false },
+        },
+        y2: {
+          position: 'right',
+          title: { display: true, text: yLabel(), color: '#4a9eff', font: { size: 11, family: 'monospace' } },
+          ticks: { color: '#4a9eff', font: { family: 'monospace', size: 11 } },
+          grid: { color: '#1a1a1a' },
         }
       }
     }
@@ -522,9 +522,9 @@ function buildChart() {
     if (!ca) return;
     if (y < ca.top) {
       togglePicker();
-    } else if (x < ca.left && y >= ca.top && y <= ca.bottom) {
+    } else if (x > ca.right && y >= ca.top && y <= ca.bottom) {
       useAGL = !useAGL;
-      chart.options.scales.y.title.text = yLabel();
+      chart.options.scales.y2.title.text = yLabel();
       updateUrl();
       refresh();
     } else if (y > ca.bottom && x >= ca.left && x <= ca.right) {
@@ -543,7 +543,7 @@ function buildChart() {
     const ca = chart.chartArea;
     if (!ca) return;
     const hot = y < ca.top
-      || (x < ca.left && y >= ca.top && y <= ca.bottom)
+      || (x > ca.right && y >= ca.top && y <= ca.bottom)
       || (y > ca.bottom && x >= ca.left && x <= ca.right);
     canvas.style.cursor = hot ? 'pointer' : 'default';
   });
@@ -573,10 +573,10 @@ async function refresh() {
   chart.options.scales.x.min = new Date(now - mins * 60 * 1000);
   chart.options.scales.x.max = now;
   const altVals = data.map(d => d[key]).filter(v => v != null);
-  chart.options.scales.y.min = altVals.length && altVals.every(v => v >= 0) ? 0 : undefined;
+  chart.options.scales.y2.min = altVals.length && altVals.every(v => v >= 0) ? 0 : undefined;
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
-  chart.options.scales.y2.min = -maxAbs;
-  chart.options.scales.y2.max =  maxAbs;
+  chart.options.scales.y.min = -maxAbs;
+  chart.options.scales.y.max =  maxAbs;
   lastRoc       = data.length ? data[data.length - 1].roc : 0;
   const arrow   = climbArrow(lastRoc);
   chart.options.plugins.title.text    = reg() + arrow;
