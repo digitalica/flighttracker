@@ -34,6 +34,7 @@ TARGET_HEXES = {
     "484583",  # PH-RIS
     "48462c",  # PH-SKC
     "48459c",  # PH-VHA
+    "4845f0",  # PH-VHD
     "484655",  # PH-CBN
     "48481f",  # PH-WMA
     "486237",  # PH-VHY
