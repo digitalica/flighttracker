@@ -26,9 +26,10 @@ from pathlib import Path
 
 import requests
 
-DEFAULT_FILE = Path(__file__).parent.parent / "testdata" / "tgc20260509.log"
-DEFAULT_URL  = "http://localhost:5000/sbs"
-BATCH_SIZE   = 50
+DEFAULT_FILE         = Path(__file__).parent.parent / "testdata" / "tgc20260509.log"
+DEFAULT_URL          = "http://localhost:5000/sbs"
+BATCH_SIZE           = 50
+REALTIME_WINDOW_SECS = 1  # group messages into 1-second buckets to mimic the feeder
 
 
 def is_valid(line: str) -> bool:
@@ -111,17 +112,41 @@ def main():
     else:
         time_label = "no (keeping original)"
 
-    # Parse timestamps from the final (possibly shifted) messages for real-time pacing
-    timestamps = [_parse_line_ts(l) for l in valid] if args.realtime else []
-    ts_valid = [t for t in timestamps if t is not None]
-    first_ts = min(ts_valid) if ts_valid else None
+    if args.realtime:
+        # Group messages into REALTIME_WINDOW_SECS buckets, keyed by window start time
+        timestamps = [_parse_line_ts(l) for l in valid]
+        ts_valid   = [t for t in timestamps if t is not None]
+        first_ts   = min(ts_valid) if ts_valid else None
+        if first_ts:
+            batches = []
+            bucket_msgs, bucket_ts = [], None
+            for line, ts in zip(valid, timestamps):
+                if ts is None:
+                    if bucket_msgs: bucket_msgs.append(line)
+                    continue
+                window = int((ts - first_ts).total_seconds() // REALTIME_WINDOW_SECS)
+                if bucket_ts is None:
+                    bucket_ts = window
+                if window != bucket_ts:
+                    batches.append((first_ts + timedelta(seconds=bucket_ts * REALTIME_WINDOW_SECS), bucket_msgs))
+                    bucket_msgs, bucket_ts = [], window
+                bucket_msgs.append(line)
+            if bucket_msgs:
+                batches.append((first_ts + timedelta(seconds=bucket_ts * REALTIME_WINDOW_SECS), bucket_msgs))
+        else:
+            batches = [(None, valid)]
+        mode_label = f"real-time ({REALTIME_WINDOW_SECS}s windows, {len(batches)} batches)"
+    else:
+        batches    = [(None, valid[i:i + args.batch]) for i in range(0, len(valid), args.batch)]
+        first_ts   = None
+        mode_label = "as fast as possible"
 
     print(f"File   : {log_path}")
     print(f"Lines  : {len(lines)} total, {len(valid)} valid, {skipped} skipped")
     print(f"Time   : {time_label}")
-    print(f"Mode   : {'real-time' if args.realtime else 'as fast as possible'}")
+    print(f"Mode   : {mode_label}")
     print(f"Target : {args.url}")
-    print(f"Batches: {-(-len(valid) // args.batch)} × {args.batch}")
+    print(f"Batches: {len(batches)}")
 
     answer = input("Send? [y/N] ")
     if answer.strip().lower() != "y":
@@ -132,11 +157,9 @@ def main():
     errors = 0
     start_wall = _time.monotonic()
 
-    for i in range(0, len(valid), args.batch):
-        batch = valid[i:i + args.batch]
-
-        if args.realtime and first_ts and timestamps[i] is not None:
-            target = (timestamps[i] - first_ts).total_seconds()
+    for batch_ts, batch in batches:
+        if args.realtime and first_ts and batch_ts:
+            target    = (batch_ts - first_ts).total_seconds()
             sleep_for = target - (_time.monotonic() - start_wall)
             if sleep_for > 0:
                 _time.sleep(sleep_for)
@@ -148,7 +171,7 @@ def main():
             print(f"\r  {sent}/{len(valid)} messages sent", end="", flush=True)
         except requests.exceptions.RequestException as exc:
             errors += 1
-            print(f"\nBatch {i // args.batch + 1} failed: {exc}", file=sys.stderr)
+            print(f"\nBatch failed: {exc}", file=sys.stderr)
             if errors >= 3:
                 print("Too many errors, aborting.", file=sys.stderr)
                 return 1
