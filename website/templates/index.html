@@ -191,15 +191,16 @@ const RANGES  = [30, 60, 120, 240, 480, 960];
 const RLABEL  = { 30: '30 min', 60: '1 h', 120: '2 h', 240: '4 h', 480: '8 h', 960: '16 h' };
 const DEF_HEX = '484763'; // PH-TGC
 
-let aircraft     = [];
-let statusMap    = {};
-let lastPost     = null;
-let sessionStart = null;
-let hex          = DEF_HEX;
-let mins         = 30;
-let useAGL       = false;
-let chart        = null;
-let lastRoc      = 0;
+let aircraft      = [];
+let statusMap     = {};
+let lastPost      = null;
+let sessionStart  = null;
+let lastTakeoffTs = null;
+let hex           = DEF_HEX;
+let mins          = 30;
+let useAGL        = false;
+let chart         = null;
+let lastRoc       = 0;
 let currentView  = 'altitude';
 
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
@@ -207,8 +208,8 @@ const yLabel = () => useAGL ? 'ft  (AGL - calculated)' : 'ft  (baro)';
 
 const ROC_ARROW_MIN = 150; // ft/min threshold to show climb/descent arrow
 function climbArrow(roc) {
-  if (roc >  ROC_ARROW_MIN) return ' ↑';
-  if (roc < -ROC_ARROW_MIN) return ' ↓';
+  if (roc >  ROC_ARROW_MIN) return ' 🛫';
+  if (roc < -ROC_ARROW_MIN) return ' 🛬';
   return '';
 }
 
@@ -260,7 +261,7 @@ function flightTimeStr(startDate) {
 function lastSeenLabel(h) {
   const s = acStatus(h);
   if (s === 'active') {
-    const ft = sessionStart ? `, ${flightTimeStr(sessionStart)} flight time` : '';
+    const ft = lastTakeoffTs ? `, ${flightTimeStr(lastTakeoffTs)} flight time` : '';
     return `now${ft}`;
   }
   if (s === 'inactive') return 'not today';
@@ -303,6 +304,7 @@ function _buildPickerContent(onSelect) {
       hex = div.dataset.hex;
       announcedEvents.clear();
       eventsInitialized = false;
+      lastTakeoffTs = null;
       picker.style.display = 'none';
       onSelect();
     });
@@ -548,9 +550,10 @@ function buildChart() {
 }
 
 async function refresh() {
-  const [resp, newStatus] = await Promise.all([
+  const [resp, newStatus, evResp] = await Promise.all([
     fetch(`/api/altitude/${hex}?minutes=${mins}`).then(r => r.json()),
     fetch('/api/status').then(r => r.json()),
+    fetch(`/api/events/${hex}`).then(r => r.json()),
   ]);
 
   statusMap    = newStatus.aircraft;
@@ -558,6 +561,8 @@ async function refresh() {
   document.getElementById('user-count').textContent =
     newStatus.active_users === 1 ? '1 user' : `${newStatus.active_users} users`;
   sessionStart = resp.session_start ? new Date(resp.session_start) : null;
+  const takeoffs = evResp.events.filter(e => e.type === 'takeoff');
+  lastTakeoffTs  = takeoffs.length ? new Date(takeoffs[takeoffs.length - 1].ts) : null;
   const data   = resp.points;
 
   const key = useAGL ? 'agl' : 'baro';
@@ -670,9 +675,12 @@ if (window.speechSynthesis) window.speechSynthesis.addEventListener('voiceschang
 function speak(text) {
   if (!window.speechSynthesis) return;
   const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'en-GB';
   const voices = window.speechSynthesis.getVoices();
-  const female = voices.find(v => /female|woman|zira|samantha|karen|moira|fiona|victoria|tessa|alice|amelie|anna|emma|sara|susan/i.test(v.name))
-              || voices.find(v => v.name.toLowerCase().includes('f') && v.lang.startsWith('en'));
+  const female = voices.find(v => v.lang === 'en-GB' && /female|woman|zira|samantha|karen|moira|fiona|victoria|tessa|alice|amelie|anna|emma|sara|susan/i.test(v.name))
+              || voices.find(v => v.lang.startsWith('en') && /female|woman|zira|samantha|karen|moira|fiona|victoria|tessa|alice|amelie|anna|emma|sara|susan/i.test(v.name))
+              || voices.find(v => v.lang === 'en-GB')
+              || voices.find(v => v.lang.startsWith('en'));
   if (female) utter.voice = female;
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(utter);
