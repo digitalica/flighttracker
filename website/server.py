@@ -285,6 +285,16 @@ def _filter_altitude_outliers(rows, max_rate_ft_per_min: int = 5000) -> list:
     return [r for r, k in zip(rows, keep) if k]
 
 
+def _compute_agl_offset(rows) -> int:
+    """Compute ground offset in ft by averaging all rows at the two lowest altitude values,
+    rounded to the nearest 100 ft."""
+    if not rows:
+        return 0
+    two_lowest = sorted(set(r["alt_baro"] for r in rows))[:2]
+    matching = [r["alt_baro"] for r in rows if r["alt_baro"] in two_lowest]
+    return round(sum(matching) / len(matching) / 100) * 100
+
+
 def _find_session_start(icao_hex: str) -> str | None:
     """Return the timestamp of the first reading in the current flight session."""
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
@@ -360,8 +370,6 @@ def altitude(icao_hex: str):
     minutes = request.args.get("minutes", 30, type=int)
     since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
 
-    AGL_OFFSET = -200  # temporary hardcoded offset until proper detection is implemented
-
     with _db() as conn:
         rows = conn.execute(
             """
@@ -376,6 +384,8 @@ def altitude(icao_hex: str):
         ).fetchall()
 
     rows = _filter_altitude_outliers(rows)
+    agl_offset = _compute_agl_offset(rows)
+
     step = max(1, len(rows) // MAX_POINTS)
     rows = rows[::step]
 
@@ -383,7 +393,7 @@ def altitude(icao_hex: str):
     return jsonify({
         "session_start": _find_session_start(icao_hex),
         "points": [
-            {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - AGL_OFFSET, "roc": roc[i]}
+            {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - agl_offset, "roc": roc[i]}
             for i, r in enumerate(rows)
         ],
     })
