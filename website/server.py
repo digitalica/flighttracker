@@ -242,7 +242,7 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
 # Rate of climb
 # ---------------------------------------------------------------------------
 
-def _compute_roc(rows, window_secs: int = 10) -> list[int]:
+def _compute_roc(rows, window_secs: int = 15) -> list[int]:
     """Smoothed rate of climb in ft/min using a sliding time window."""
     n = len(rows)
     if n < 2:
@@ -278,7 +278,7 @@ def _filter_altitude_outliers(rows, max_rate_ft_per_min: int = 5000) -> list:
             if j < 0 or j >= n:
                 continue
             dt = abs(times[i] - times[j])
-            if dt >= 1:
+            if dt > 0:
                 rates.append(abs(alts[i] - alts[j]) / dt * 60)
         if rates and all(r > max_rate_ft_per_min for r in rates):
             keep[i] = False

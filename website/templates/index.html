@@ -180,7 +180,7 @@ let useAGL       = false;
 let chart        = null;
 
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
-const yLabel = () => useAGL ? 'ft  (AGL)' : 'ft  (baro)';
+const yLabel = () => useAGL ? 'ft  (AGL - calculated)' : 'ft  (baro)';
 
 const GAP_SECS = 60;
 
@@ -221,7 +221,7 @@ function buildSeries(data, key) {
         out.push({ x: new Date(mid), y: null });
       }
     }
-    out.push({ x: new Date(data[i].t), y: data[i][key] });
+    out.push({ x: new Date(data[i].t), y: data[i][key], baro: data[i].baro, agl: data[i].agl });
   }
   return out;
 }
@@ -358,7 +358,16 @@ function buildChart() {
           titleColor: '#888',
           bodyColor: '#ddd',
           bodyFont: { family: 'monospace' },
-          callbacks: { label: ctx => `${ctx.parsed.y} ft` }
+          callbacks: {
+            label: ctx => {
+              if (ctx.datasetIndex === 1) return `${ctx.parsed.y} ft/min`;
+              const pt = ctx.raw;
+              if (pt.y == null) return null;
+              return useAGL
+                ? `${pt.agl} ft AGL  (${pt.baro} ft baro)`
+                : `${pt.baro} ft baro  (${pt.agl} ft AGL)`;
+            }
+          }
         }
       },
       scales: {
