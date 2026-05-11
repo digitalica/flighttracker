@@ -21,7 +21,7 @@ from pathlib import Path
 
 import requests
 
-DEFAULT_FILE = Path(__file__).parent.parent / "data" / "tgc20260509.log"
+DEFAULT_FILE = Path(__file__).parent.parent / "testdata" / "tgc20260509.log"
 DEFAULT_URL  = "http://localhost:5000/sbs"
 BATCH_SIZE   = 50
 

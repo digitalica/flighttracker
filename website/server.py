@@ -187,6 +187,9 @@ def _parse_sbs_line(line: str) -> dict | None:
         if gnd is not None:
             result["on_ground"] = 1 if gnd in ("1", "-1") else 0
 
+    if result.get("altitude") is None and (result.get("lat") is None or result.get("lon") is None):
+        return None
+
     return result
 
 
@@ -206,16 +209,11 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             if not parsed:
                 continue
 
-            altitude = parsed.get("altitude")
-            lat = parsed.get("lat")
-            lon = parsed.get("lon")
-            if altitude is None and (lat is None or lon is None):
-                continue
-
             parsed_count += 1
             hex_code = parsed["hex"]
             seen_aircraft.add(hex_code)
             msg_ts = parsed.get("ts") or now
+            altitude = parsed.get("altitude")
 
             if altitude is not None:
                 _last_alt[hex_code] = (msg_ts, altitude)
@@ -223,7 +221,7 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             _last_seen[hex_code] = msg_ts
             db_rows.append((
                 hex_code, msg_ts.isoformat(), altitude,
-                lat, lon, parsed.get("on_ground"),
+                parsed.get("lat"), parsed.get("lon"), parsed.get("on_ground"),
             ))
 
     if not db_rows:
