@@ -153,7 +153,12 @@
 <div id="view-events">
   <div id="events-title"></div>
   <div id="events-subtitle"></div>
-  <div style="margin-bottom:20px">
+  <div style="margin-bottom:20px;display:flex;align-items:center;gap:16px">
+    <label style="font-size:12px;color:#888;cursor:pointer;display:flex;align-items:center;gap:6px">
+      <input type="checkbox" id="speech-enabled" checked
+        style="cursor:pointer;accent-color:#4a9eff">
+      speech announcements
+    </label>
     <button id="speech-test-btn" onclick="testSpeech()"
       style="background:#1a1a1a;border:1px solid #333;color:#888;font-family:monospace;font-size:12px;padding:4px 12px;border-radius:3px;cursor:pointer;">
       test speech
@@ -697,6 +702,7 @@ if (window.speechSynthesis) window.speechSynthesis.addEventListener('voiceschang
 
 function speak(text) {
   if (!window.speechSynthesis) return;
+  if (!document.getElementById('speech-enabled').checked) return;
   const utter = new SpeechSynthesisUtterance(text);
   utter.lang = 'en-GB';
   const voices = window.speechSynthesis.getVoices();
