@@ -573,7 +573,7 @@ async function refresh() {
   chart.options.scales.y2.min = -maxAbs;
   chart.options.scales.y2.max =  maxAbs;
   lastRoc       = data.length ? data[data.length - 1].roc : 0;
-  const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
+  const arrow   = climbArrow(lastRoc);
   chart.options.plugins.title.text    = reg() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
   chart.update('none');

@@ -99,7 +99,14 @@ def main():
     valid = [l.strip() for l in lines if is_valid(l.strip())]
     skipped = len(lines) - len(valid)
 
-    if args.align:
+    if args.realtime and not args.no_redate:
+        timestamps = [_parse_line_ts(l) for l in valid]
+        first_ts_raw = min((t for t in timestamps if t is not None), default=None)
+        if first_ts_raw is not None:
+            delta = datetime.utcnow() - first_ts_raw
+            valid = [apply_delta(l, delta) for l in valid]
+        time_label = "realtime → first event at now (UTC)"
+    elif args.align:
         timestamps = [_parse_line_ts(l) for l in valid]
         first_ts = min((t for t in timestamps if t is not None), default=None)
         if first_ts is not None:
