@@ -562,7 +562,13 @@ async function refresh() {
     newStatus.active_users === 1 ? '1 user' : `${newStatus.active_users} users`;
   sessionStart = resp.session_start ? new Date(resp.session_start) : null;
   const takeoffs = evResp.events.filter(e => e.type === 'takeoff');
-  lastTakeoffTs  = takeoffs.length ? new Date(takeoffs[takeoffs.length - 1].ts) : null;
+  if (takeoffs.length) {
+    const t = new Date(takeoffs[takeoffs.length - 1].ts);
+    const landed = evResp.events.some(e => e.type === 'landing' && new Date(e.ts) > t);
+    lastTakeoffTs = landed ? null : t;
+  } else {
+    lastTakeoffTs = null;
+  }
   const data   = resp.points;
 
   const key = useAGL ? 'agl' : 'baro';
