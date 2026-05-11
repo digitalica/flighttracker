@@ -75,6 +75,7 @@
 
     /* ── Views ── */
     #view-altitude { width: 100%; height: 100%; padding: 24px; position: relative; }
+    #view-events   { display: none; height: 100%; overflow-y: auto; padding: 48px 32px; max-width: 640px; }
     #view-about    { display: none; height: 100%; overflow-y: auto; padding: 48px 32px; max-width: 640px; line-height: 1.7; }
     #view-about h1 { font-size: 18px; color: #ddd; margin-bottom: 20px; font-weight: normal; }
     #view-about p  { font-size: 13px; color: #aaa; margin-bottom: 14px; }
@@ -84,14 +85,38 @@
     #view-about td, #view-about th { padding: 4px 16px 4px 0; vertical-align: top; }
     #view-about th { color: #666; font-weight: normal; }
 
-    /* ── Aircraft picker (altitude view) ── */
+    /* ── Events header ── */
+    #events-title {
+      font-size: 20px;
+      color: #ddd;
+      cursor: pointer;
+      text-align: center;
+      margin-bottom: 4px;
+    }
+    #events-title:hover { color: #fff; }
+    #events-subtitle {
+      font-size: 12px;
+      color: #aaa;
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    #events-list { font-size: 13px; }
+    #events-list table { border-collapse: collapse; }
+    #events-list td { padding: 5px 20px 5px 0; color: #aaa; }
+    #events-list .ev-takeoff { color: #5c5; }
+    #events-list .ev-landing { color: #fa4; }
+    #events-list .ev-climb   { color: #4a9eff; }
+    #events-list .ev-desc    { color: #888; }
+    #events-list .ev-dur     { color: #555; }
+
+    /* ── Aircraft picker (fixed, shared between views) ── */
     #picker {
       display: none;
-      position: absolute;
+      position: fixed;
       background: #1a1a1a;
       border: 1px solid #333;
       border-radius: 4px;
-      z-index: 10;
+      z-index: 200;
       min-width: 160px;
       max-height: 360px;
       overflow-y: auto;
@@ -113,12 +138,26 @@
 <span id="hamburger">&#9776;</span>
 <div id="nav">
   <div id="nav-altitude" class="active" onclick="showView('altitude')">Altitude</div>
-  <div id="nav-about"               onclick="showView('about')">About</div>
+  <div id="nav-events"                  onclick="showView('events')">Events</div>
+  <div id="nav-about"                   onclick="showView('about')">About</div>
 </div>
+
+<div id="picker"></div>
 
 <div id="view-altitude">
   <canvas id="chart"></canvas>
-  <div id="picker"></div>
+</div>
+
+<div id="view-events">
+  <div id="events-title"></div>
+  <div id="events-subtitle"></div>
+  <div style="margin-bottom:20px">
+    <button id="speech-test-btn" onclick="testSpeech()"
+      style="background:#1a1a1a;border:1px solid #333;color:#888;font-family:monospace;font-size:12px;padding:4px 12px;border-radius:3px;cursor:pointer;">
+      test speech
+    </button>
+  </div>
+  <div id="events-list"></div>
 </div>
 
 <div id="view-about">
@@ -145,27 +184,7 @@
 </div>
 
 <script>
-// ── View switching ────────────────────────────────────────────────────────────
-function showView(name) {
-  document.getElementById('view-altitude').style.display = name === 'altitude' ? 'block' : 'none';
-  document.getElementById('view-about').style.display    = name === 'about'    ? 'block' : 'none';
-  document.getElementById('nav-altitude').className = name === 'altitude' ? 'active' : '';
-  document.getElementById('nav-about').className    = name === 'about'    ? 'active' : '';
-  document.getElementById('nav').style.display = 'none';
-  if (name === 'altitude' && chart) chart.resize();
-}
-
-document.getElementById('hamburger').addEventListener('click', e => {
-  e.stopPropagation();
-  const nav = document.getElementById('nav');
-  nav.style.display = nav.style.display === 'block' ? 'none' : 'block';
-});
-
-document.addEventListener('click', () => {
-  document.getElementById('nav').style.display = 'none';
-});
-
-// ── Chart ─────────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 const RANGES  = [30, 60, 120, 240, 480, 960];
 const RLABEL  = { 30: '30 min', 60: '1 h', 120: '2 h', 240: '4 h', 480: '8 h', 960: '16 h' };
 const DEF_HEX = '484763'; // PH-TGC
@@ -178,10 +197,178 @@ let hex          = DEF_HEX;
 let mins         = 30;
 let useAGL       = false;
 let chart        = null;
+let currentView  = 'altitude';
 
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
 const yLabel = () => useAGL ? 'ft  (AGL - calculated)' : 'ft  (baro)';
 
+const ROC_ARROW_MIN = 150; // ft/min threshold to show climb/descent arrow
+function climbArrow(roc) {
+  if (roc >  ROC_ARROW_MIN) return ' ↑';
+  if (roc < -ROC_ARROW_MIN) return ' ↓';
+  return '';
+}
+
+// ── View switching ────────────────────────────────────────────────────────────
+function showView(name) {
+  currentView = name;
+  document.getElementById('view-altitude').style.display = name === 'altitude' ? 'block' : 'none';
+  document.getElementById('view-events').style.display   = name === 'events'   ? 'block' : 'none';
+  document.getElementById('view-about').style.display    = name === 'about'    ? 'block' : 'none';
+  document.getElementById('nav-altitude').className = name === 'altitude' ? 'active' : '';
+  document.getElementById('nav-events').className   = name === 'events'   ? 'active' : '';
+  document.getElementById('nav-about').className    = name === 'about'    ? 'active' : '';
+  document.getElementById('nav').style.display = 'none';
+  updateUrl();
+  if (name === 'altitude' && chart) chart.resize();
+  if (name === 'events') refreshEvents();
+}
+
+document.getElementById('hamburger').addEventListener('click', e => {
+  e.stopPropagation();
+  const nav = document.getElementById('nav');
+  nav.style.display = nav.style.display === 'block' ? 'none' : 'block';
+});
+
+document.addEventListener('click', () => {
+  document.getElementById('nav').style.display = 'none';
+});
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function acStatus(h) {
+  const ls = statusMap[h];
+  if (!ls) return 'inactive';
+  const t = new Date(ls);
+  if (Date.now() - t < 60_000) return 'active';
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  return t < midnight ? 'inactive' : 'sleeping';
+}
+
+const STATUS_SYMBOL = { active: '●', sleeping: '●', inactive: '○' };
+const STATUS_COLOR  = { active: '#5c5', sleeping: '#fa4', inactive: '#444' };
+
+function flightTimeStr(startDate) {
+  const totalMins = Math.floor((Date.now() - startDate) / 60_000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function lastSeenLabel(h) {
+  const s = acStatus(h);
+  if (s === 'active') {
+    const ft = sessionStart ? `, ${flightTimeStr(sessionStart)} flight time` : '';
+    return `now${ft}`;
+  }
+  if (s === 'inactive') return 'not today';
+  const diffMs = Date.now() - new Date(statusMap[h]);
+  const mins = Math.floor(diffMs / 60_000);
+  return mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)} h ago`;
+}
+
+function updateDataStatus() {
+  const el = document.getElementById('data-status');
+  if (!lastPost) {
+    el.textContent = 'no data';
+    el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
+    return;
+  }
+  const ageSecs = (Date.now() - lastPost) / 1000;
+  if (ageSecs <= 10) {
+    el.textContent = 'data ok';
+    el.style.cssText = 'background:#0d2a0d;color:#5c5;border-color:#1a4a1a';
+  } else if (ageSecs <= 60) {
+    el.textContent = 'slow data';
+    el.style.cssText = 'background:#2a2a0d;color:#cc5;border-color:#4a4a1a';
+  } else {
+    el.textContent = 'no data';
+    el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
+  }
+}
+
+// ── Aircraft picker ───────────────────────────────────────────────────────────
+function _buildPickerContent(onSelect) {
+  const picker = document.getElementById('picker');
+  const sorted = [...aircraft].sort((a, b) => a.registration.localeCompare(b.registration));
+  picker.innerHTML = sorted.map(a => {
+    const s = acStatus(a.hex);
+    return `<div class="${a.hex === hex ? 'active' : ''}" data-hex="${a.hex}">` +
+           `<span style="color:${STATUS_COLOR[s]}">${STATUS_SYMBOL[s]}</span> ${a.registration}</div>`;
+  }).join('');
+  picker.querySelectorAll('div').forEach(div => {
+    div.addEventListener('click', () => {
+      hex = div.dataset.hex;
+      picker.style.display = 'none';
+      onSelect();
+    });
+  });
+}
+
+function togglePicker() {
+  const picker = document.getElementById('picker');
+  if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
+  _buildPickerContent(() => {
+    chart.options.plugins.title.text = reg();
+    chart.update('none');
+    updateUrl();
+    refresh();
+  });
+  const canvas = document.getElementById('chart');
+  const cRect  = canvas.getBoundingClientRect();
+  picker.style.left = (cRect.left + chart.chartArea.left) + 'px';
+  picker.style.top  = (cRect.top  + chart.chartArea.top - 4) + 'px';
+  picker.style.display = 'block';
+}
+
+function toggleEventsPicker() {
+  const picker = document.getElementById('picker');
+  if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
+  _buildPickerContent(() => {
+    document.getElementById('events-title').textContent = reg();
+    refreshEvents();
+  });
+  const anchor = document.getElementById('events-title');
+  const rect   = anchor.getBoundingClientRect();
+  picker.style.left = rect.left + 'px';
+  picker.style.top  = (rect.bottom + 4) + 'px';
+  picker.style.display = 'block';
+}
+
+document.addEventListener('click', e => {
+  const picker = document.getElementById('picker');
+  const canvas = document.getElementById('chart');
+  const evTitle = document.getElementById('events-title');
+  if (picker.style.display === 'block'
+      && !picker.contains(e.target)
+      && e.target !== canvas
+      && e.target !== evTitle) {
+    picker.style.display = 'none';
+  }
+});
+
+document.getElementById('events-title').addEventListener('click', toggleEventsPicker);
+
+// ── URL state ─────────────────────────────────────────────────────────────────
+function readUrlState() {
+  const p = new URLSearchParams(window.location.search);
+  const acReg = p.get('ac');
+  if (acReg) {
+    const found = aircraft.find(a => a.registration === acReg);
+    if (found) hex = found.hex;
+  }
+  const minsParam = parseInt(p.get('mins'));
+  if (RANGES.includes(minsParam)) mins = minsParam;
+  if (p.has('agl')) useAGL = p.get('agl') === '1';
+  const view = p.get('view');
+  if (view === 'events' || view === 'about') currentView = view;
+}
+
+function updateUrl() {
+  const p = new URLSearchParams({ ac: reg(), mins, agl: useAGL ? '1' : '0', view: currentView });
+  history.replaceState(null, '', '?' + p.toString());
+}
+
+// ── Chart ─────────────────────────────────────────────────────────────────────
 const GAP_SECS = 60;
 
 function findGaps(data) {
@@ -224,82 +411,6 @@ function buildSeries(data, key) {
     out.push({ x: new Date(data[i].t), y: data[i][key], baro: data[i].baro, agl: data[i].agl });
   }
   return out;
-}
-
-function updateDataStatus() {
-  const el = document.getElementById('data-status');
-  if (!lastPost) {
-    el.textContent = 'no data';
-    el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
-    return;
-  }
-  const ageSecs = (Date.now() - lastPost) / 1000;
-  if (ageSecs <= 10) {
-    el.textContent = 'data ok';
-    el.style.cssText = 'background:#0d2a0d;color:#5c5;border-color:#1a4a1a';
-  } else if (ageSecs <= 60) {
-    el.textContent = 'slow data';
-    el.style.cssText = 'background:#2a2a0d;color:#cc5;border-color:#4a4a1a';
-  } else {
-    el.textContent = 'no data';
-    el.style.cssText = 'background:#2a0d0d;color:#c44;border-color:#4a1a1a';
-  }
-}
-
-function acStatus(h) {
-  const ls = statusMap[h];
-  if (!ls) return 'inactive';
-  const t = new Date(ls);
-  if (Date.now() - t < 60_000) return 'active';
-  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-  return t < midnight ? 'inactive' : 'sleeping';
-}
-
-const STATUS_SYMBOL = { active: '●', sleeping: '●', inactive: '○' };
-const STATUS_COLOR  = { active: '#5c5', sleeping: '#fa4', inactive: '#444' };
-
-function flightTimeStr(startDate) {
-  const totalMins = Math.floor((Date.now() - startDate) / 60_000);
-  const h = Math.floor(totalMins / 60);
-  const m = totalMins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-function lastSeenLabel(h) {
-  const s = acStatus(h);
-  if (s === 'active') {
-    const ft = sessionStart ? `, ${flightTimeStr(sessionStart)} flight time` : '';
-    return `now${ft}`;
-  }
-  if (s === 'inactive') return 'not today';
-  const diffMs = Date.now() - new Date(statusMap[h]);
-  const mins = Math.floor(diffMs / 60_000);
-  return mins < 60 ? `${mins} min ago` : `${Math.floor(mins / 60)} h ago`;
-}
-
-function readUrlState() {
-  const p = new URLSearchParams(window.location.search);
-  const acReg = p.get('ac');
-  if (acReg) {
-    const found = aircraft.find(a => a.registration === acReg);
-    if (found) hex = found.hex;
-  }
-  const minsParam = parseInt(p.get('mins'));
-  if (RANGES.includes(minsParam)) mins = minsParam;
-  if (p.has('agl')) useAGL = p.get('agl') === '1';
-}
-
-function updateUrl() {
-  const p = new URLSearchParams({ ac: reg(), mins, agl: useAGL ? '1' : '0' });
-  history.replaceState(null, '', '?' + p.toString());
-}
-
-async function init() {
-  aircraft = await fetch('/api/aircraft').then(r => r.json());
-  readUrlState();
-  buildChart();
-  await refresh();
-  setInterval(refresh, 5000);
 }
 
 function buildChart() {
@@ -402,7 +513,6 @@ function buildChart() {
     const y = e.clientY - rect.top;
     const ca = chart.chartArea;
     if (!ca) return;
-
     if (y < ca.top) {
       togglePicker();
     } else if (x < ca.left && y >= ca.top && y <= ca.bottom) {
@@ -457,56 +567,156 @@ async function refresh() {
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
   chart.options.scales.y2.min = -maxAbs;
   chart.options.scales.y2.max =  maxAbs;
+  const lastRoc = data.length ? data[data.length - 1].roc : 0;
+  const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
+  chart.options.plugins.title.text    = reg() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
   chart.update('none');
   updateDataStatus();
+
+  if (currentView === 'events') {
+    document.getElementById('events-title').textContent    = reg() + arrow;
+    document.getElementById('events-subtitle').textContent = lastSeenLabel(hex);
+  }
 }
 
-function togglePicker() {
-  const picker = document.getElementById('picker');
-  if (picker.style.display === 'block') {
-    picker.style.display = 'none';
+// ── Events view ───────────────────────────────────────────────────────────────
+function durStr(ms) {
+  const totalMins = Math.round(ms / 60_000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+const EV_LABEL = {
+  takeoff:         { icon: '↑', label: 'takeoff',              cls: 'ev-takeoff' },
+  landing:         { icon: '↓', label: 'landing',              cls: 'ev-landing' },
+  climbing_3000:   { icon: '↑', label: 'approaching 3500 ft',  cls: 'ev-climb'   },
+  climbing_5500:   { icon: '↑', label: 'approaching 6000 ft',  cls: 'ev-climb'   },
+  descending_3000: { icon: '↓', label: 'descending (thru 3000 ft)', cls: 'ev-desc' },
+  descending_5500: { icon: '↓', label: 'descending (thru 5500 ft)', cls: 'ev-desc' },
+};
+
+function relTime(t) {
+  const mins = Math.floor((Date.now() - t) / 60_000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  return `${Math.floor(mins / 60)} h ago`;
+}
+
+function renderEvents(evs, aglOffset) {
+  const el = document.getElementById('events-list');
+  if (!evs.length) {
+    el.innerHTML = '<div style="color:#555">No events today.</div>';
     return;
   }
+  // Pre-compute durations (requires forward order)
+  const rows = [];
+  let lastTakeoffTs = null;
+  for (const ev of evs) {
+    const t = new Date(ev.ts);
+    let dur = '';
+    if (ev.type === 'takeoff') lastTakeoffTs = t;
+    if (ev.type === 'landing' && lastTakeoffTs) {
+      dur = durStr(t - lastTakeoffTs);
+      lastTakeoffTs = null;
+    }
+    rows.push({ ev, t, dur });
+  }
 
-  const sorted = [...aircraft].sort((a, b) => a.registration.localeCompare(b.registration));
-  picker.innerHTML = sorted.map(a => {
-    const s = acStatus(a.hex);
-    const sym   = STATUS_SYMBOL[s];
-    const color = STATUS_COLOR[s];
-    return `<div class="${a.hex === hex ? 'active' : ''}" data-hex="${a.hex}">` +
-           `<span style="color:${color}">${sym}</span> ${a.registration}</div>`;
-  }).join('');
-
-  picker.querySelectorAll('div').forEach(div => {
-    div.addEventListener('click', () => {
-      hex = div.dataset.hex;
-      picker.style.display = 'none';
-      chart.options.plugins.title.text = reg();
-      chart.update('none');
-      updateUrl();
-      refresh();
-    });
-  });
-
-  const canvas = document.getElementById('chart');
-  const wrap   = document.getElementById('view-altitude');
-  const cRect  = canvas.getBoundingClientRect();
-  const wRect  = wrap.getBoundingClientRect();
-  picker.style.left = (cRect.left - wRect.left + chart.chartArea.left) + 'px';
-  picker.style.top  = (cRect.top  - wRect.top  + chart.chartArea.top - 4) + 'px';
-  picker.style.display = 'block';
+  let html = `<div style="color:#555;margin-bottom:12px;font-size:11px;">AGL offset: ${aglOffset} ft</div>`;
+  html += '<table>';
+  for (const { ev, t, dur } of [...rows].reverse()) {
+    const time = t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const def  = EV_LABEL[ev.type] || { icon: '?', label: ev.type, cls: '' };
+    const speech = eventSpeechText(ev.type);
+    const clickAttr = speech ? `onclick="speak('${speech}')" style="cursor:pointer"` : '';
+    html += `<tr ${clickAttr}>
+      <td style="padding-right:14px">${time}</td>
+      <td style="padding-right:20px;color:#555">${relTime(t)}</td>
+      <td class="${def.cls}" style="padding-right:14px">${def.icon} ${def.label}</td>
+      <td><span class="ev-dur">${dur}</span></td>
+    </tr>`;
+  }
+  html += '</table>';
+  el.innerHTML = html;
 }
 
-document.addEventListener('click', e => {
-  const picker = document.getElementById('picker');
-  const canvas = document.getElementById('chart');
-  if (picker.style.display === 'block'
-      && !picker.contains(e.target)
-      && e.target !== canvas) {
-    picker.style.display = 'none';
+const NATO = {
+  A:'Alpha', B:'Bravo', C:'Charlie', D:'Delta', E:'Echo', F:'Foxtrot',
+  G:'Golf', H:'Hotel', I:'India', J:'Juliet', K:'Kilo', L:'Lima',
+  M:'Mike', N:'November', O:'Oscar', P:'Papa', Q:'Quebec', R:'Romeo',
+  S:'Sierra', T:'Tango', U:'Uniform', V:'Victor', W:'Whiskey',
+  X:'X-ray', Y:'Yankee', Z:'Zulu',
+};
+
+function natoSuffix() {
+  const letters = reg().replace(/[^A-Za-z]/g, '').toUpperCase();
+  return letters.slice(-2).split('').map(c => NATO[c] || c).join(' ');
+}
+
+const announcedEvents = new Set();
+
+function speak(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+}
+
+function testSpeech() {
+  speak(`${natoSuffix()} flight tracker speech test`);
+}
+
+function eventSpeechText(evType) {
+  const id = natoSuffix();
+  const phrases = {
+    takeoff:         `${id} took off`,
+    landing:         `${id} landed`,
+    climbing_3000:   `${id} approaching 3500 feet`,
+    climbing_5500:   `${id} approaching 6000 feet`,
+    descending_3000: `${id} descending`,
+    descending_5500: `${id} descending`,
+  };
+  return phrases[evType] || null;
+}
+
+function speakEvent(ev) {
+  const text = eventSpeechText(ev.type);
+  if (text) speak(text);
+}
+
+async function refreshEvents() {
+  const resp = await fetch(`/api/events/${hex}`).then(r => r.json());
+
+  // Announce any events not yet spoken, computing durations in forward order
+  let lastTakeoffTs = null;
+  let lastTakeoffDur = '';
+  for (const ev of resp.events) {
+    const t = new Date(ev.ts);
+    if (ev.type === 'takeoff') { lastTakeoffTs = t; lastTakeoffDur = ''; }
+    if (ev.type === 'landing' && lastTakeoffTs) {
+      lastTakeoffDur = durStr(t - lastTakeoffTs);
+      lastTakeoffTs  = null;
+    }
+    if (!announcedEvents.has(ev.ts)) {
+      announcedEvents.add(ev.ts);
+      if (announcedEvents.size > 1) speakEvent(ev);
+    }
   }
-});
+
+  renderEvents(resp.events, resp.agl_offset);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  aircraft = await fetch('/api/aircraft').then(r => r.json());
+  readUrlState();
+  buildChart();
+  showView(currentView);
+  await refresh();
+  setInterval(refresh, 5000);
+  setInterval(() => { if (currentView === 'events') refreshEvents(); }, 5000);
+}
 
 init();
 </script>

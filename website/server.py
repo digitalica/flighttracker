@@ -295,6 +295,49 @@ def _compute_agl_offset(rows) -> int:
     return round(sum(matching) / len(matching) / 100) * 100
 
 
+def _detect_events(rows, agl_offset: int) -> list[dict]:
+    """Detect altitude threshold crossings from a sequence of readings.
+
+    Each threshold has separate up/down trigger levels (hysteresis) to prevent
+    noise around the boundary from firing multiple events. State resets to
+    unknown after any gap > STALE_SECONDS.
+    """
+    # (trig_up, trig_down, event_up, event_down)
+    THRESHOLDS = [
+        (300,  100,  "takeoff",        "landing"),
+        (3100, 2900, "climbing_3000",  "descending_3000"),
+        (5600, 5400, "climbing_5500",  "descending_5500"),
+    ]
+    events = []
+    states = [None] * len(THRESHOLDS)  # None=unknown, True=above, False=below
+    descent_fired = False  # suppress extra descending events once one has fired
+    for i, row in enumerate(rows):
+        if i > 0:
+            dt = (datetime.fromisoformat(row["ts"]) - datetime.fromisoformat(rows[i - 1]["ts"])).total_seconds()
+            if dt > STALE_SECONDS:
+                states = [None] * len(THRESHOLDS)
+                descent_fired = False
+        agl = row["alt_baro"] - agl_offset
+        for j, (trig_up, trig_down, up_name, down_name) in enumerate(THRESHOLDS):
+            s = states[j]
+            if s is None:
+                if agl > trig_up:     states[j] = True
+                elif agl < trig_down: states[j] = False
+            elif s and agl < trig_down:
+                is_altitude_descent = down_name != "landing"
+                if not (is_altitude_descent and descent_fired):
+                    events.append({"type": down_name, "ts": row["ts"]})
+                if is_altitude_descent:
+                    descent_fired = True
+                states[j] = False
+            elif not s and agl > trig_up:
+                events.append({"type": up_name, "ts": row["ts"]})
+                if up_name == "takeoff":
+                    descent_fired = False
+                states[j] = True
+    return events
+
+
 def _find_session_start(icao_hex: str) -> str | None:
     """Return the timestamp of the first reading in the current flight session."""
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
@@ -396,6 +439,31 @@ def altitude(icao_hex: str):
             {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - agl_offset, "roc": roc[i]}
             for i, r in enumerate(rows)
         ],
+    })
+
+
+@app.route("/api/events/<icao_hex>")
+def events(icao_hex: str):
+    since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    with _db() as conn:
+        rows = conn.execute(
+            """
+            SELECT ts, alt_baro
+              FROM readings
+             WHERE icao_hex = ?
+               AND ts >= ?
+               AND alt_baro IS NOT NULL
+             ORDER BY ts
+            """,
+            (icao_hex, since),
+        ).fetchall()
+
+    rows = _filter_altitude_outliers(rows)
+    agl_offset = _compute_agl_offset(rows)
+    return jsonify({
+        "agl_offset": agl_offset,
+        "events": _detect_events(rows, agl_offset),
     })
 
 
