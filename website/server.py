@@ -242,7 +242,7 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
 # Rate of climb
 # ---------------------------------------------------------------------------
 
-def _compute_roc(rows, window_secs: int = 60) -> list[int]:
+def _compute_roc(rows, window_secs: int = 10) -> list[int]:
     """Smoothed rate of climb in ft/min using a sliding time window."""
     n = len(rows)
     if n < 2:
