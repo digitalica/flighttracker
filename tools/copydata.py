@@ -3,7 +3,7 @@
 Copy flight readings from one date to today.
 
 Useful for testing or demo purposes when no aircraft are currently flying.
-Copies both readings and agl_offsets, shifting timestamps to today.
+Copies readings, shifting timestamps to today.
 
 Usage
 -----
@@ -65,8 +65,6 @@ def main():
                 return 1
             conn.execute("DELETE FROM readings WHERE ts >= ? AND ts < ?",
                          (f"{today}T00:00:00", f"{today}T23:59:59.999999"))
-            conn.execute("DELETE FROM agl_offsets WHERE session_start >= ? AND session_start < ?",
-                         (f"{today}T00:00:00", f"{today}T23:59:59.999999"))
             print(f"Cleared {count_today} readings for today.")
 
         # Fetch source readings
@@ -94,27 +92,8 @@ def main():
             new_readings,
         )
 
-        # Fetch and copy agl_offsets
-        offsets = conn.execute(
-            "SELECT icao_hex, session_start, offset_ft FROM agl_offsets "
-            "WHERE session_start >= ? AND session_start < ?",
-            (f"{source_date}T00:00:00", f"{source_date}T23:59:59.999999"),
-        ).fetchall()
-
-        if offsets:
-            new_offsets = [
-                (o["icao_hex"], shift(o["session_start"]), o["offset_ft"])
-                for o in offsets
-            ]
-            conn.executemany(
-                "INSERT INTO agl_offsets (icao_hex, session_start, offset_ft) VALUES (?,?,?)",
-                new_offsets,
-            )
-
         conn.commit()
-        print(f"Copied {len(new_readings)} readings"
-              + (f" and {len(offsets)} AGL offsets" if offsets else "")
-              + f" from {source_date} → {today}.")
+        print(f"Copied {len(new_readings)} readings from {source_date} → {today}.")
         return 0
 
     except Exception as e:

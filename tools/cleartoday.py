@@ -34,21 +34,19 @@ def main():
     conn = sqlite3.connect(db_path)
     try:
         readings = conn.execute("SELECT COUNT(*) FROM readings WHERE ts >= ? AND ts < ?", (lo, hi)).fetchone()[0]
-        offsets  = conn.execute("SELECT COUNT(*) FROM agl_offsets WHERE session_start >= ? AND session_start < ?", (lo, hi)).fetchone()[0]
 
-        if readings == 0 and offsets == 0:
+        if readings == 0:
             print(f"No data for today ({today}).")
             return 0
 
-        answer = input(f"Delete {readings} readings and {offsets} AGL offsets for {today}? [y/N] ")
+        answer = input(f"Delete {readings} readings for {today}? [y/N] ")
         if answer.strip().lower() != "y":
             print("Aborted.")
             return 1
 
         conn.execute("DELETE FROM readings WHERE ts >= ? AND ts < ?", (lo, hi))
-        conn.execute("DELETE FROM agl_offsets WHERE session_start >= ? AND session_start < ?", (lo, hi))
         conn.commit()
-        print(f"Deleted {readings} readings and {offsets} AGL offsets for {today}.")
+        print(f"Deleted {readings} readings for {today}.")
         return 0
 
     except Exception as e:

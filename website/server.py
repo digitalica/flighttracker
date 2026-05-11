@@ -133,14 +133,6 @@ def _init_db() -> None:
                 on_ground INTEGER
             );
             CREATE INDEX IF NOT EXISTS idx_readings ON readings(icao_hex, ts);
-
-            CREATE TABLE IF NOT EXISTS agl_offsets (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                icao_hex      TEXT    NOT NULL,
-                session_start TEXT    NOT NULL,
-                offset_ft     INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_offsets ON agl_offsets(icao_hex, session_start);
         """)
 
 
@@ -226,17 +218,11 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             msg_ts = parsed.get("ts") or now
 
             if altitude is not None:
-                prev = _last_alt.get(hex_code)
-                new_session = prev is None or (msg_ts - prev[0]).total_seconds() > STALE_SECONDS
-
                 _last_alt[hex_code] = (msg_ts, altitude)
-
-                if new_session and -500 <= altitude <= 500:
-                    db_rows.append(("offset", hex_code, msg_ts.isoformat(), altitude))
 
             _last_seen[hex_code] = msg_ts
             db_rows.append((
-                "reading", hex_code, msg_ts.isoformat(), altitude,
+                hex_code, msg_ts.isoformat(), altitude,
                 lat, lon, parsed.get("on_ground"),
             ))
 
@@ -245,17 +231,11 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
 
     with _db() as conn:
         for row in db_rows:
-            if row[0] == "offset":
-                conn.execute(
-                    "INSERT INTO agl_offsets (icao_hex, session_start, offset_ft) VALUES (?,?,?)",
-                    row[1:],
-                )
-            else:
-                conn.execute(
-                    "INSERT INTO readings (icao_hex, ts, alt_baro, lat, lon, on_ground)"
-                    " VALUES (?,?,?,?,?,?)",
-                    row[1:],
-                )
+            conn.execute(
+                "INSERT INTO readings (icao_hex, ts, alt_baro, lat, lon, on_ground)"
+                " VALUES (?,?,?,?,?,?)",
+                row,
+            )
 
     return parsed_count, len(seen_aircraft)
 
@@ -357,24 +337,17 @@ def altitude(icao_hex: str):
     minutes = request.args.get("minutes", 30, type=int)
     since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
 
+    AGL_OFFSET = -200  # temporary hardcoded offset until proper detection is implemented
+
     with _db() as conn:
         rows = conn.execute(
             """
-            SELECT r.ts, r.alt_baro,
-                   COALESCE(
-                       (SELECT o.offset_ft
-                          FROM agl_offsets o
-                         WHERE o.icao_hex = r.icao_hex
-                           AND o.session_start <= r.ts
-                         ORDER BY o.session_start DESC
-                         LIMIT 1),
-                       0
-                   ) AS offset_ft
-              FROM readings r
-             WHERE r.icao_hex = ?
-               AND r.ts >= ?
-               AND r.alt_baro IS NOT NULL
-             ORDER BY r.ts
+            SELECT ts, alt_baro
+              FROM readings
+             WHERE icao_hex = ?
+               AND ts >= ?
+               AND alt_baro IS NOT NULL
+             ORDER BY ts
             """,
             (icao_hex, since),
         ).fetchall()
@@ -386,7 +359,7 @@ def altitude(icao_hex: str):
     return jsonify({
         "session_start": _find_session_start(icao_hex),
         "points": [
-            {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - r["offset_ft"], "roc": roc[i]}
+            {"t": r["ts"], "baro": r["alt_baro"], "agl": r["alt_baro"] - AGL_OFFSET, "roc": roc[i]}
             for i, r in enumerate(rows)
         ],
     })
