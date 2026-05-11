@@ -99,7 +99,6 @@ _lock = threading.Lock()
 
 VISITOR_TIMEOUT = 60  # seconds before a visitor is considered inactive
 
-MAX_CLIMB_RATE = 1000  # ft/s — readings exceeding this are dropped as outliers
 
 
 # ---------------------------------------------------------------------------
@@ -229,13 +228,6 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             if altitude is not None:
                 prev = _last_alt.get(hex_code)
                 new_session = prev is None or (msg_ts - prev[0]).total_seconds() > STALE_SECONDS
-
-                # Outlier filter: drop readings that imply an impossible climb/descent rate
-                if not new_session:
-                    prev_ts, prev_alt = prev
-                    dt = (msg_ts - prev_ts).total_seconds()
-                    if dt >= 1 and abs(altitude - prev_alt) / dt > MAX_CLIMB_RATE:
-                        continue
 
                 _last_alt[hex_code] = (msg_ts, altitude)
 
