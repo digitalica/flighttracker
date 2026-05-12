@@ -312,7 +312,16 @@ function updateDataStatus() {
 }
 
 // ── Aircraft picker ───────────────────────────────────────────────────────────
-function _buildPickerContent(onSelect) {
+let pickerTimer = null;
+
+function _resetPickerTimer() {
+  clearTimeout(pickerTimer);
+  pickerTimer = setTimeout(() => {
+    document.getElementById('picker').style.display = 'none';
+  }, 30_000);
+}
+
+function _openPicker(anchorRect, onSelect) {
   const picker = document.getElementById('picker');
   const sorted = [...aircraft].sort((a, b) => a.registration.localeCompare(b.registration));
   picker.innerHTML = sorted.map(a => {
@@ -322,6 +331,7 @@ function _buildPickerContent(onSelect) {
   }).join('');
   picker.querySelectorAll('div').forEach(div => {
     div.addEventListener('click', () => {
+      clearTimeout(pickerTimer);
       hex = div.dataset.hex;
       announcedEvents.clear();
       eventsInitialized = false;
@@ -330,37 +340,44 @@ function _buildPickerContent(onSelect) {
       picker.style.display = 'none';
       onSelect();
     });
+    div.addEventListener('mouseenter', _resetPickerTimer);
   });
+  // Position below the anchor, horizontally centred on it
+  picker.style.display = 'block';
+  const pw = picker.offsetWidth;
+  const cx = anchorRect.left + anchorRect.width / 2;
+  picker.style.left = Math.max(4, cx - pw / 2) + 'px';
+  picker.style.top  = (anchorRect.bottom + 4) + 'px';
+  _resetPickerTimer();
 }
 
 function togglePicker() {
   const picker = document.getElementById('picker');
-  if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
-  _buildPickerContent(() => {
+  if (picker.style.display === 'block') { clearTimeout(pickerTimer); picker.style.display = 'none'; return; }
+  const canvas = document.getElementById('chart');
+  const cRect  = canvas.getBoundingClientRect();
+  const tb     = chart.titleBlock;
+  const anchorRect = {
+    left:   cRect.left,
+    width:  cRect.width,
+    bottom: cRect.top + (tb ? tb.bottom : chart.chartArea.top),
+  };
+  _openPicker(anchorRect, () => {
     chart.options.plugins.title.text = reg();
     chart.update('none');
     updateUrl();
     refresh();
   });
-  const canvas = document.getElementById('chart');
-  const cRect  = canvas.getBoundingClientRect();
-  picker.style.left = (cRect.left + chart.chartArea.left) + 'px';
-  picker.style.top  = (cRect.top  + chart.chartArea.top - 4) + 'px';
-  picker.style.display = 'block';
 }
 
 function toggleEventsPicker() {
   const picker = document.getElementById('picker');
-  if (picker.style.display === 'block') { picker.style.display = 'none'; return; }
-  _buildPickerContent(() => {
+  if (picker.style.display === 'block') { clearTimeout(pickerTimer); picker.style.display = 'none'; return; }
+  const anchor = document.getElementById('events-title');
+  _openPicker(anchor.getBoundingClientRect(), () => {
     lastRoc = 0;
     refreshEvents();
   });
-  const anchor = document.getElementById('events-title');
-  const rect   = anchor.getBoundingClientRect();
-  picker.style.left = rect.left + 'px';
-  picker.style.top  = (rect.bottom + 4) + 'px';
-  picker.style.display = 'block';
 }
 
 document.addEventListener('click', e => {
@@ -371,6 +388,7 @@ document.addEventListener('click', e => {
       && !picker.contains(e.target)
       && e.target !== canvas
       && e.target !== evTitle) {
+    clearTimeout(pickerTimer);
     picker.style.display = 'none';
   }
 });
