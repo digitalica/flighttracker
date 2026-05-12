@@ -711,8 +711,12 @@ const NATO = {
 };
 
 function natoSuffix() {
-  const letters = reg().replace(/[^A-Za-z]/g, '').toUpperCase();
-  return letters.slice(-2).split('').map(c => NATO[c] || c).join(' ');
+  const r = reg().toUpperCase();
+  const dashIdx = r.indexOf('-');
+  const suffix = dashIdx >= 0 ? r.slice(dashIdx + 1) : r.slice(2);
+  // If either of the last two characters is a digit, speak the full suffix
+  const part = /\d/.test(suffix.slice(-2)) ? suffix : suffix.slice(-2);
+  return part.split('').map(c => NATO[c] || c).join(' ');
 }
 
 const announcedEvents = new Set();
