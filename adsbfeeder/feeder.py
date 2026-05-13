@@ -55,7 +55,7 @@ TARGET_HEXES = {
     "484bf9",  # PH-GIN
     "48462e",  # PH-MFT
     "48487e",  # PH-2X3
-    "484d14",  # PH-1466
+    "484d14",  # PH1466
     "a8b0a3",  # N65909
     "3ecadc",  # D-KRUA
 }
