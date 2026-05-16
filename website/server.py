@@ -508,6 +508,30 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/robots.txt")
+def robots():
+    return (
+        "User-agent: *\nAllow: /\nSitemap: https://phtgc.nl/sitemap.xml\n",
+        200,
+        {"Content-Type": "text/plain"},
+    )
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "  <url>\n"
+        "    <loc>https://phtgc.nl/</loc>\n"
+        "    <changefreq>daily</changefreq>\n"
+        "    <priority>1.0</priority>\n"
+        "  </url>\n"
+        "</urlset>\n"
+    )
+    return xml, 200, {"Content-Type": "application/xml"}
+
+
 if __name__ == "__main__":
     print("FlightTracker website server")
     print(f"Tracking {len(TARGET_AIRCRAFT)} aircraft")
