@@ -11,10 +11,19 @@ services:
       - proxy
     labels:
       - "traefik.enable=true"
+      # main site
       - "traefik.http.routers.flighttracker.rule=Host(`phtgc.nl`)"
       - "traefik.http.routers.flighttracker.entrypoints=websecure"
       - "traefik.http.routers.flighttracker.tls.certresolver=letsencrypt"
       - "traefik.http.services.flighttracker.loadbalancer.server.port=5000"
+      # www → apex redirect
+      - "traefik.http.routers.flighttracker-www.rule=Host(`www.phtgc.nl`)"
+      - "traefik.http.routers.flighttracker-www.entrypoints=websecure"
+      - "traefik.http.routers.flighttracker-www.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.flighttracker-www.middlewares=redirect-www@docker"
+      - "traefik.http.middlewares.redirect-www.redirectregex.regex=^https://www\\.phtgc\\.nl(.*)"
+      - "traefik.http.middlewares.redirect-www.redirectregex.replacement=https://phtgc.nl$${1}"
+      - "traefik.http.middlewares.redirect-www.redirectregex.permanent=true"
 
 volumes:
   db_data:
