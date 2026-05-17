@@ -397,14 +397,15 @@ async function refresh() {
   document.getElementById('user-count').textContent =
     newStatus.active_users === 1 ? '1 user' : `${newStatus.active_users} users`;
   sessionStart = resp.session_start ? new Date(resp.session_start) : null;
-  const takeoffs = evResp.events.filter(e => e.type === 'takeoff');
-  if (takeoffs.length) {
-    const t = new Date(takeoffs[takeoffs.length - 1].ts);
-    const landed = evResp.events.some(e => e.type === 'landing' && new Date(e.ts) > t);
-    lastTakeoffTs = landed ? null : t;
-  } else {
-    lastTakeoffTs = null;
+  // Replay events in order to find whether the aircraft is currently airborne
+  let _takeoffTs = null;
+  for (const ev of evResp.events) {
+    const t = new Date(ev.ts);
+    if (ev.type === 'takeoff')     { _takeoffTs = t; }
+    if (ev.type === 'landing')     { _takeoffTs = null; }
+    // touch_and_go: still airborne, keep _takeoffTs as the original takeoff
   }
+  lastTakeoffTs = _takeoffTs;
   const data   = resp.points;
 
   const key = useAGL ? 'agl' : 'baro';
@@ -443,6 +444,7 @@ function durStr(ms) {
 const EV_LABEL = {
   takeoff:         { icon: '↑', label: 'takeoff',              cls: 'ev-takeoff'  },
   landing:         { icon: '↓', label: 'landing',              cls: 'ev-landing'  },
+  touch_and_go:    { icon: '↕', label: 'touch and go',         cls: 'ev-takeoff'  },
   climbing_3000:   { icon: '↑', label: 'approaching 3500 ft',  cls: 'ev-climb'    },
   climbing_5500:   { icon: '↑', label: 'approaching 6000 ft',  cls: 'ev-climb'    },
   descending_3000: { icon: '↓', label: 'descending (thru 3000 ft)', cls: 'ev-desc' },
@@ -550,6 +552,7 @@ function eventSpeechText(evType) {
   const phrases = {
     takeoff:         `${id} took off`,
     landing:         `${id} landed`,
+    touch_and_go:    `${id} touch and go`,
     climbing_3000:   `${id} approaching 3500 feet`,
     climbing_5500:   `${id} approaching 6000 feet`,
     descending_3000: `${id} descending`,
@@ -571,11 +574,9 @@ async function refreshEvents() {
   let lastTakeoffDur = '';
   for (const ev of resp.events) {
     const t = new Date(ev.ts);
-    if (ev.type === 'takeoff') { lastTakeoffTs = t; lastTakeoffDur = ''; }
-    if (ev.type === 'landing' && lastTakeoffTs) {
-      lastTakeoffDur = durStr(t - lastTakeoffTs);
-      lastTakeoffTs  = null;
-    }
+    if (ev.type === 'takeoff')                  { lastTakeoffTs = t; lastTakeoffDur = ''; }
+    if (ev.type === 'landing' && lastTakeoffTs) { lastTakeoffDur = durStr(t - lastTakeoffTs); lastTakeoffTs = null; }
+    // touch_and_go: keep lastTakeoffTs (still airborne)
     if (!announcedEvents.has(ev.ts)) {
       announcedEvents.add(ev.ts);
       if (eventsInitialized) speakEvent(ev);

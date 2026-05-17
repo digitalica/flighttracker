@@ -1,100 +1,114 @@
-# Website server installation
+# Website server — installation & operations
 
-Runs on the tracking server (100.70.200.82). Receives SBS batches from the feeder,
-stores altitude readings in SQLite, and serves the altitude graph at port 5000.
+Runs on the tracking server (`100.70.200.82`). Receives SBS batches from the feeder,
+stores altitude readings in SQLite, and serves the altitude graph at `https://phtgc.nl`.
 
-## 1. Install dependencies
+The server runs as a single Docker container, managed by Traefik (reverse proxy + TLS).
 
-```bash
-python3 -m venv /opt/flighttracker-website/venv
-/opt/flighttracker-website/venv/bin/pip install -r requirements.txt
-cp -r server.py templates/ /opt/flighttracker-website/
-```
+---
 
-## 2. Test manually
+## Initial setup (first time only)
 
-```bash
-/opt/flighttracker-website/venv/bin/python /opt/flighttracker-website/server.py
-```
+### Prerequisites
 
-Then open `http://100.70.200.82:5000` in a browser (Tailscale required).
+- Docker + Docker Compose installed
+- Traefik running with an external network named `proxy` and a `letsencrypt` cert resolver
+- Port 443 open; DNS for `phtgc.nl` and `www.phtgc.nl` pointing to the server
 
-## 3. Install as a systemd service
+### Deploy
 
 ```bash
-cat > /etc/systemd/system/flighttracker-website.service << 'EOF'
-[Unit]
-Description=FlightTracker website
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/opt/flighttracker-website
-ExecStart=/opt/flighttracker-website/venv/bin/python server.py
-Restart=on-failure
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-systemctl daemon-reload
-systemctl enable --now flighttracker-website
-systemctl status flighttracker-website
+# On the server
+mkdir -p /opt/flighttracker
+cd /opt/flighttracker
+# Copy docker-compose.yml from the repo (or pull via git)
+docker compose up -d
 ```
 
-## 4. Check it works
+Traefik picks up the labels automatically and requests a Let's Encrypt certificate.
+The SQLite database is stored in a named Docker volume (`db_data`) and persists across restarts.
+
+---
+
+## Updating the application (code changes)
+
+Pushing to `main` triggers a GitHub Actions workflow that builds and pushes a new image to
+`ghcr.io/digitalica/flighttracker:latest`. To deploy it on the server:
 
 ```bash
-# Aircraft list
-curl http://localhost:5000/api/aircraft | python3 -m json.tool
-
-# Altitude data for PH-TGC (last 30 min)
-curl 'http://localhost:5000/api/altitude/484763?minutes=30' | python3 -m json.tool
+cd /opt/flighttracker
+docker compose pull
+docker compose up -d
 ```
 
-## Running locally (quick test)
+No downtime beyond the container restart (~1 second).
+
+---
+
+## Updating the configuration (docker-compose.yml changes)
+
+When `docker-compose.yml` changes (Traefik labels, environment variables, volumes, etc.),
+copy the updated file to the server and re-apply:
 
 ```bash
-cd website && pip install -r requirements.txt && python server.py
+# From your local machine
+scp docker-compose.yml root@100.70.200.82:/opt/flighttracker/
+
+# Then on the server
+cd /opt/flighttracker
+docker compose up -d
 ```
 
-The database (`flighttracker.db`) is created automatically on first run in the same directory as `server.py`.
+Docker Compose only recreates the container if its configuration actually changed.
+
+---
+
+## Useful commands
+
+```bash
+# Check container status
+docker compose ps
+
+# Tail live logs
+docker compose logs -f
+
+# Restart container
+docker compose restart
+
+# Open a shell inside the container
+docker compose exec website bash
+```
+
+---
+
+## Database backup
+
+The SQLite database lives in the `db_data` Docker volume. To download a copy:
+
+```bash
+# Via the built-in endpoint (Tailscale required)
+curl -o flighttracker.db http://100.70.200.82:5000/db
+# or
+curl -o flighttracker.db https://phtgc.nl/db
+```
+
+Or copy directly from the volume:
+
+```bash
+# On the server
+docker run --rm -v flighttracker_db_data:/data -v $(pwd):/out alpine \
+  cp /data/flighttracker.db /out/
+```
+
+---
 
 ## Exporting data to CSV
 
-`export.py` queries the SQLite database and writes a CSV suitable for Excel.
-No server restart needed; it reads the database file directly.
+Use `tools/export.py` — it reads the database file directly, no server restart needed.
 
 ```bash
-cd /opt/flighttracker-website
-
-# All data → stdout
-python export.py
-
-# Today's data for one aircraft (registration or ICAO hex both work)
-python export.py --today --ac PH-TGC --out phtgc_today.csv
-python export.py --today --ac 484763 --out phtgc_today.csv
-
-# Specific date, all aircraft
-python export.py --date 2026-04-30 --out 20260430.csv
-
-# Specific date + aircraft
-python export.py --date 2026-04-30 --ac PH-GYS --out phgys_20260430.csv
+# Download the database first (see above), then locally:
+DB_PATH=./flighttracker.db python tools/export.py --today --ac PH-TGC --out phtgc_today.csv
 ```
 
 Output columns: `timestamp, registration, icao_hex, altitude_ft, lat, lon, on_ground`.
-
-To copy the file to your local machine:
-
-```bash
-scp root@100.70.200.82:/opt/flighttracker-website/phtgc_today.csv .
-```
-
-## Replacing the test server
-
-This server uses the same `POST /sbs` contract as the test server, so the feeder needs no changes — just point `SERVER_URL` in `feeder.py` at this server's address if it runs on a different host.

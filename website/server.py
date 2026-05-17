@@ -349,7 +349,25 @@ def _detect_events(rows, agl_offset: int) -> list[dict]:
         last_dt = (datetime.now(timezone.utc) - datetime.fromisoformat(rows[-1]["ts"])).total_seconds()
         if last_dt > INACTIVE_SECS:
             events.append({"type": "inactive", "ts": rows[-1]["ts"]})
-    return events
+
+    # Merge landing + takeoff within 90 s into a single touch_and_go
+    TOUCH_AND_GO_SECS = 90
+    merged = []
+    i = 0
+    while i < len(events):
+        ev = events[i]
+        if (ev["type"] == "landing"
+                and i + 1 < len(events)
+                and events[i + 1]["type"] == "takeoff"):
+            gap = (datetime.fromisoformat(events[i + 1]["ts"])
+                   - datetime.fromisoformat(ev["ts"])).total_seconds()
+            if gap <= TOUCH_AND_GO_SECS:
+                merged.append({"type": "touch_and_go", "ts": ev["ts"]})
+                i += 2
+                continue
+        merged.append(ev)
+        i += 1
+    return merged
 
 
 def _find_session_start(icao_hex: str) -> str | None:
