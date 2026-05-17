@@ -362,7 +362,7 @@ def _detect_events(rows, agl_offset: int) -> list[dict]:
             gap = (datetime.fromisoformat(events[i + 1]["ts"])
                    - datetime.fromisoformat(ev["ts"])).total_seconds()
             if gap <= TOUCH_AND_GO_SECS:
-                merged.append({"type": "touch_and_go", "ts": ev["ts"]})
+                merged.append({"type": "touch_and_go", "ts": events[i + 1]["ts"]})
                 i += 2
                 continue
         merged.append(ev)
