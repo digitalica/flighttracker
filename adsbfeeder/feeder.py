@@ -4,14 +4,21 @@ ADS-B feeder client.
 
 Reads the SBS (BaseStation) TCP stream from the local dump1090/readsb instance,
 filters for target aircraft, and forwards message batches to the tracking server.
+
+When the server is unreachable, messages are persisted to a local SQLite database
+and retransmitted (oldest first) once the server is reachable again. Messages older
+than MAX_BACKLOG_DAYS are pruned automatically.
 """
 
+import os
 import socket
+import sqlite3
 import time
 import logging
 import sys
 import threading
 from collections import deque
+from pathlib import Path
 
 import requests
 
@@ -22,6 +29,10 @@ SERVER_URL = "https://phtgc.nl/sbs"
 SEND_INTERVAL = 1        # seconds between POSTs
 BATCH_MAX = 10           # max messages per batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
+HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
+
+MAX_BACKLOG_DAYS = 7
+PERSIST_PATH = Path(os.environ.get("FEEDER_DB", Path(__file__).parent / "pending.db"))
 
 # Only messages for these ICAO hex codes are forwarded to the server
 TARGET_HEXES = {
@@ -79,6 +90,64 @@ _buffer: deque[str] = deque()
 _lock = threading.Lock()
 
 
+# ---------------------------------------------------------------------------
+# Persistent backlog (SQLite)
+# ---------------------------------------------------------------------------
+
+def _init_backlog() -> None:
+    with sqlite3.connect(PERSIST_PATH) as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS pending (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                received REAL    NOT NULL,
+                msg      TEXT    NOT NULL
+            )
+        """)
+    _prune_backlog()
+
+
+def _prune_backlog() -> None:
+    cutoff = time.time() - MAX_BACKLOG_DAYS * 86400
+    with sqlite3.connect(PERSIST_PATH) as con:
+        n = con.execute("DELETE FROM pending WHERE received < ?", (cutoff,)).rowcount
+    if n:
+        log.info(f"Pruned {n} messages older than {MAX_BACKLOG_DAYS} days from backlog")
+
+
+def _enqueue_backlog(messages: list[str]) -> None:
+    now = time.time()
+    with sqlite3.connect(PERSIST_PATH) as con:
+        con.executemany(
+            "INSERT INTO pending(received, msg) VALUES (?, ?)",
+            [(now, m) for m in messages],
+        )
+    log.info(f"Persisted {len(messages)} messages to backlog ({PERSIST_PATH})")
+
+
+def _peek_backlog(limit: int) -> tuple[list[int], list[str]]:
+    with sqlite3.connect(PERSIST_PATH) as con:
+        rows = con.execute(
+            "SELECT id, msg FROM pending ORDER BY id LIMIT ?", (limit,)
+        ).fetchall()
+    return [r[0] for r in rows], [r[1] for r in rows]
+
+
+def _ack_backlog(ids: list[int]) -> None:
+    with sqlite3.connect(PERSIST_PATH) as con:
+        con.execute(
+            f"DELETE FROM pending WHERE id IN ({','.join(['?'] * len(ids))})", ids
+        )
+
+
+def _backlog_size() -> int:
+    with sqlite3.connect(PERSIST_PATH) as con:
+        return con.execute("SELECT COUNT(*) FROM pending").fetchone()[0]
+
+
+# ---------------------------------------------------------------------------
+# SBS reader
+# ---------------------------------------------------------------------------
+
 def read_sbs():
     """Connect to the SBS stream and push lines into the shared buffer."""
     while True:
@@ -106,18 +175,57 @@ def read_sbs():
         time.sleep(RECONNECT_DELAY)
 
 
-HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
+# ---------------------------------------------------------------------------
+# Send loop
+# ---------------------------------------------------------------------------
 
 def send_loop():
-    """Drain the buffer periodically and POST batches to the server."""
+    """Drain the buffer periodically and POST batches to the server.
+
+    When a backlog exists in SQLite, drains it first (oldest messages first)
+    before sending fresh messages. Fresh messages received during a backlog
+    drain are persisted to SQLite so they survive a restart and maintain order.
+    """
+    _init_backlog()
     last_send = 0.0
+    last_prune = time.monotonic()
+
     while True:
         time.sleep(SEND_INTERVAL)
+
+        # Prune once a day
+        if time.monotonic() - last_prune > 86400:
+            _prune_backlog()
+            last_prune = time.monotonic()
+
+        # Drain fresh messages from the in-memory buffer
         with _lock:
             batch = []
             while _buffer and len(batch) < BATCH_MAX:
                 batch.append(_buffer.popleft())
 
+        ids, backlog_msgs = _peek_backlog(BATCH_MAX)
+
+        if ids:
+            # Backlog exists: persist fresh messages to maintain chronological
+            # order, then drain the oldest backlog batch.
+            if batch:
+                _enqueue_backlog(batch)
+            try:
+                resp = requests.post(SERVER_URL, json={"messages": backlog_msgs}, timeout=10)
+                resp.raise_for_status()
+                _ack_backlog(ids)
+                last_send = time.monotonic()
+                remaining = _backlog_size()
+                log.info(
+                    f"Backlog: sent {len(backlog_msgs)} messages -> HTTP {resp.status_code}"
+                    + (f" ({remaining} remaining)" if remaining else " (backlog cleared)")
+                )
+            except requests.exceptions.RequestException as exc:
+                log.warning(f"Backlog send failed (server still unreachable): {exc}")
+            continue
+
+        # No backlog — send fresh messages normally
         now = time.monotonic()
         if not batch and (now - last_send) < HEARTBEAT_INTERVAL:
             continue
@@ -132,17 +240,20 @@ def send_loop():
                 log.info(f"Heartbeat -> HTTP {resp.status_code}")
         except requests.exceptions.RequestException as exc:
             log.warning(f"Failed to send batch: {exc}")
-            # Put messages back so they are not lost
-            with _lock:
-                for msg in reversed(batch):
-                    _buffer.appendleft(msg)
+            if batch:
+                _enqueue_backlog(batch)
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def main():
     log.info("ADS-B feeder starting")
-    log.info(f"SBS source : {SBS_HOST}:{SBS_PORT}")
-    log.info(f"Server     : {SERVER_URL}")
-    log.info(f"Tracking   : {', '.join(sorted(TARGET_HEXES))}")
+    log.info(f"SBS source   : {SBS_HOST}:{SBS_PORT}")
+    log.info(f"Server       : {SERVER_URL}")
+    log.info(f"Backlog DB   : {PERSIST_PATH}")
+    log.info(f"Tracking     : {', '.join(sorted(TARGET_HEXES))}")
     log.info(f"Send interval: {SEND_INTERVAL}s")
 
     reader = threading.Thread(target=read_sbs, daemon=True, name="sbs-reader")
