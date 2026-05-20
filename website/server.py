@@ -397,7 +397,7 @@ def _find_session_start(icao_hex: str) -> str | None:
 # Routes
 # ---------------------------------------------------------------------------
 
-@app.route("/sbs_disabled", methods=["POST"])
+@app.route("/sbs", methods=["POST"])
 def ingest():
     global _last_post
     if request.remote_addr not in ALLOWED_IPS:
