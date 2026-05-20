@@ -204,7 +204,7 @@ def send_loop():
             while _buffer and len(batch) < BATCH_MAX:
                 batch.append(_buffer.popleft())
 
-        ids, backlog_msgs = _peek_backlog(BATCH_MAX)
+        ids, backlog_msgs = _peek_backlog(BATCH_MAX * 10)
 
         if ids:
             # Backlog exists: persist fresh messages to maintain chronological
