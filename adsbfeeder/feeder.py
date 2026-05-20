@@ -30,6 +30,7 @@ SEND_INTERVAL = 1        # seconds between POSTs
 BATCH_MAX = 10           # max messages per batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
 HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
+CATCHUP_FACTOR = 10      # backlog batches are this many times larger than normal
 
 MAX_BACKLOG_DAYS = 7
 PERSIST_PATH = Path(os.environ.get("FEEDER_DB", Path(__file__).parent / "pending.db"))
@@ -204,7 +205,7 @@ def send_loop():
             while _buffer and len(batch) < BATCH_MAX:
                 batch.append(_buffer.popleft())
 
-        ids, backlog_msgs = _peek_backlog(BATCH_MAX * 10)
+        ids, backlog_msgs = _peek_backlog(BATCH_MAX * CATCHUP_FACTOR)
 
         if ids:
             # Backlog exists: persist fresh messages to maintain chronological
