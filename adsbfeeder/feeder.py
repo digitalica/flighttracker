@@ -208,22 +208,24 @@ def send_loop():
         ids, backlog_msgs = _peek_backlog(BATCH_MAX * CATCHUP_FACTOR)
 
         if ids:
-            # Backlog exists: persist fresh messages to maintain chronological
-            # order, then drain the oldest backlog batch.
-            if batch:
-                _enqueue_backlog(batch)
+            # Backlog exists: combine with fresh messages in one POST so that
+            # a small backlog clears in a single round-trip.
+            combined = backlog_msgs + batch
             try:
-                resp = requests.post(SERVER_URL, json={"messages": backlog_msgs}, timeout=10)
+                resp = requests.post(SERVER_URL, json={"messages": combined}, timeout=10)
                 resp.raise_for_status()
                 _ack_backlog(ids)
                 last_send = time.monotonic()
                 remaining = _backlog_size()
                 log.info(
-                    f"Backlog: sent {len(backlog_msgs)} messages -> HTTP {resp.status_code}"
+                    f"Backlog: sent {len(backlog_msgs)} + {len(batch)} fresh"
+                    f" -> HTTP {resp.status_code}"
                     + (f" ({remaining} remaining)" if remaining else " (backlog cleared)")
                 )
             except requests.exceptions.RequestException as exc:
                 log.warning(f"Backlog send failed (server still unreachable): {exc}")
+                if batch:
+                    _enqueue_backlog(batch)
             continue
 
         # No backlog — send fresh messages normally
