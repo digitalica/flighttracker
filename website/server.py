@@ -267,8 +267,11 @@ def _compute_roc(rows, window_secs: int = 15) -> list[int]:
 def _filter_altitude_outliers(rows, max_rate_ft_per_min: int = 5000) -> list:
     """Drop rows where altitude implies an impossible rate vs all available neighbors.
 
-    A point is an outlier only when every neighbor exceeds the threshold, so a
-    single spike is removed without also flagging the points on either side of it.
+    A point is an outlier only when every nearby neighbor exceeds the threshold,
+    so a single spike is removed without also flagging the points on either side.
+    Neighbors more than STALE_SECONDS apart are ignored — they belong to a
+    different session and would otherwise produce an artificially low rate that
+    masks the spike.
     """
     if len(rows) < 2:
         return list(rows)
@@ -282,7 +285,7 @@ def _filter_altitude_outliers(rows, max_rate_ft_per_min: int = 5000) -> list:
             if j < 0 or j >= n:
                 continue
             dt = abs(times[i] - times[j])
-            if dt > 0:
+            if 0 < dt <= STALE_SECONDS:
                 rates.append(abs(alts[i] - alts[j]) / dt * 60)
         if rates and all(r > max_rate_ft_per_min for r in rates):
             keep[i] = False
