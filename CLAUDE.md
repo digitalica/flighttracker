@@ -53,6 +53,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 48462E   | PH-MFT       | Diamond DV20 Katana         |                              |
 | 48487E   | PH-2X3       | TL TL-232 Condor            | ultralight                   |
 | 484D14   | PH1466       | Diamond HK-36 TTC           | motorglider                  |
+| 484FF2   | PH-PLP       | Van's RV-7                  |                              |
 | A8B0A3   | N65909       | Cessna 172 Skyhawk (1983)   | US registration              |
 | 3ECADC   | D-KRUA       | Schleicher ASG-29           | glider, German               |
 
