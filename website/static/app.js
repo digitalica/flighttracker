@@ -291,7 +291,7 @@ function buildChart() {
         legend: { display: false },
         title: {
           display: true,
-          text: reg(),
+          text: regSuffix(),
           color: '#ddd',
           font: { size: 20, family: 'monospace', weight: 'normal' },
           padding: { top: 4, bottom: 2 },
@@ -423,13 +423,13 @@ async function refresh() {
   lastRoc       = data.length ? data[data.length - 1].roc  : 0;
   lastAgl       = data.length ? data[data.length - 1].agl  : null;
   const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
-  chart.options.plugins.title.text    = reg() + arrow;
+  chart.options.plugins.title.text    = regSuffix() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
-  document.title = `${reg()} FlightTracker`;
+  document.title = `${regSuffix()} FlightTracker`;
   chart.update('none');
   updateDataStatus();
 
-  document.getElementById('events-title').textContent    = reg() + arrow;
+  document.getElementById('events-title').textContent    = regSuffix() + arrow;
   document.getElementById('events-subtitle').textContent = lastSeenLabel(hex);
 }
 
@@ -507,18 +507,20 @@ const NATO = {
   X:'X-ray', Y:'Yankee', Z:'Zulu',
 };
 
-function natoSuffixFor(registration) {
+function regSuffixFor(registration) {
   const r = registration.toUpperCase();
   const dashIdx = r.indexOf('-');
   const suffix = dashIdx >= 0 ? r.slice(dashIdx + 1) : r.slice(2);
-  // If either of the last two characters is a digit, speak the full suffix
-  const part = /\d/.test(suffix.slice(-2)) ? suffix : suffix.slice(-2);
-  return part.split('').map(c => NATO[c] || c).join(' ');
+  // If any of the last three characters is a digit, speak the full suffix
+  return /\d/.test(suffix.slice(-3)) ? suffix : suffix.slice(-3);
 }
 
-function natoSuffix() {
-  return natoSuffixFor(reg());
+function natoSuffixFor(registration) {
+  return regSuffixFor(registration).split('').map(c => NATO[c] || c).join(' ');
 }
+
+function regSuffix() { return regSuffixFor(reg()); }
+function natoSuffix() { return natoSuffixFor(reg()); }
 
 // ── Speech ────────────────────────────────────────────────────────────────────
 const announcedEvents = new Set();
@@ -602,5 +604,5 @@ init();
 
 // ── Exports (for unit testing in Node.js) ────────────────────────────────────
 if (typeof module !== 'undefined') {
-  module.exports = { climbArrow, durStr, relTime, findGaps, buildSeries, natoSuffixFor };
+  module.exports = { climbArrow, durStr, relTime, findGaps, buildSeries, regSuffixFor, natoSuffixFor };
 }
