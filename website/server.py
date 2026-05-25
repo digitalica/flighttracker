@@ -503,6 +503,67 @@ def events(icao_hex: str):
     })
 
 
+@app.route("/api/current")
+def current_altitude():
+    """Return the current AGL altitude for one aircraft.
+
+    Query params:
+      ac      — registration or ICAO hex (default: PH-TGC)
+      simple  — if set, return plain-text altitude only (null if unavailable or
+                stale > 60 s), e.g. /api/current?simple=1
+    """
+    ac = request.args.get("ac", "PH-TGC")
+    # Accept both registration and hex
+    icao_hex = next(
+        (h for h, r in TARGET_AIRCRAFT.items() if r.upper() == ac.upper()),
+        ac.lower() if ac.lower() in TARGET_AIRCRAFT else "484763",
+    )
+    registration = TARGET_AIRCRAFT.get(icao_hex, icao_hex)
+
+    since_today = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ).isoformat()
+
+    with _db() as conn:
+        rows = conn.execute(
+            """
+            SELECT ts, alt_baro FROM readings
+             WHERE icao_hex = ? AND ts >= ? AND alt_baro IS NOT NULL
+             ORDER BY ts
+            """,
+            (icao_hex, since_today),
+        ).fetchall()
+
+    simple = "simple" in request.args
+
+    if not rows:
+        return ("null\n", 200, {"Content-Type": "text/plain"}) if simple else \
+               jsonify({"registration": registration, "hex": icao_hex,
+                        "agl": None, "baro": None, "ts": None, "age_secs": None})
+
+    rows = _filter_altitude_outliers(rows)
+    agl_offset = _compute_agl_offset(rows)
+    last = rows[-1]
+    baro = last["alt_baro"]
+    ts   = last["ts"]
+    age  = round((datetime.now(timezone.utc) - datetime.fromisoformat(ts)).total_seconds())
+    agl  = baro - agl_offset
+
+    if simple:
+        value = "null" if age > 60 else str(agl)
+        return value + "\n", 200, {"Content-Type": "text/plain"}
+
+    return jsonify({
+        "registration": registration,
+        "hex":          icao_hex,
+        "agl":          agl,
+        "baro":         baro,
+        "agl_offset":   agl_offset,
+        "ts":           ts,
+        "age_secs":     age,
+    })
+
+
 @app.route("/db")
 def download_db():
     if request.remote_addr not in ALLOWED_IPS:
