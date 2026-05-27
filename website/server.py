@@ -202,11 +202,12 @@ def _parse_sbs_line(line: str) -> dict | None:
 # Ingest
 # ---------------------------------------------------------------------------
 
-def _ingest(messages: list[str]) -> tuple[int, int]:
+def _ingest(messages: list[str]) -> tuple[int, int, list[float]]:
     now = datetime.now(timezone.utc)
     db_rows: list[tuple] = []
     parsed_count = 0
     seen_aircraft: set[str] = set()
+    lags: list[float] = []
 
     with _lock:
         for line in messages:
@@ -220,6 +221,8 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             msg_ts = parsed.get("ts") or now
             altitude = parsed.get("altitude")
 
+            lags.append((now - msg_ts).total_seconds())
+
             if altitude is not None:
                 _last_alt[hex_code] = (msg_ts, altitude)
 
@@ -230,7 +233,7 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
             ))
 
     if not db_rows:
-        return 0, 0
+        return 0, 0, []
 
     with _db() as conn:
         for row in db_rows:
@@ -240,7 +243,7 @@ def _ingest(messages: list[str]) -> tuple[int, int]:
                 row,
             )
 
-    return parsed_count, len(seen_aircraft)
+    return parsed_count, len(seen_aircraft), lags
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +413,12 @@ def ingest():
     messages = data.get("messages", [])
     with _lock:
         _last_post = datetime.now(timezone.utc)
-    parsed, aircraft = _ingest(messages)
-    log.info(f"ingest: {len(messages)} received, {parsed} parsed, {aircraft} aircraft")
+    parsed, aircraft, lags = _ingest(messages)
+    if lags:
+        lag_info = f"  lag min/avg/max: {min(lags):.1f}/{sum(lags)/len(lags):.1f}/{max(lags):.1f}s"
+    else:
+        lag_info = ""
+    log.info(f"ingest: {len(messages)} received, {parsed} parsed, {aircraft} aircraft{lag_info}")
     return jsonify({"ok": True, "count": len(messages)})
 
 
