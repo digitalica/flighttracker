@@ -24,6 +24,7 @@ from pathlib import Path
 import tempfile
 from flask import Flask, request, jsonify, render_template, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 logging.basicConfig(
     level=logging.INFO,
@@ -103,6 +104,36 @@ _visitors:  dict[str, datetime] = {}             # ip -> last seen (UTC)
 _lock = threading.Lock()
 
 VISITOR_TIMEOUT = 60  # seconds before a visitor is considered inactive
+
+# ---------------------------------------------------------------------------
+# Prometheus metrics
+# ---------------------------------------------------------------------------
+
+_prom_messages_received = Counter(
+    "flighttracker_messages_received_total",
+    "SBS messages received in POST /sbs batches",
+)
+_prom_messages_parsed = Counter(
+    "flighttracker_messages_parsed_total",
+    "SBS messages successfully parsed and stored",
+)
+_prom_message_lag = Histogram(
+    "flighttracker_message_lag_seconds",
+    "Seconds between message timestamp and server receipt time",
+    buckets=[0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600],
+)
+_prom_api_requests = Counter(
+    "flighttracker_api_requests_total",
+    "HTTP requests per endpoint",
+    ["endpoint"],
+)
+
+
+@app.after_request
+def _count_request(response):
+    if request.endpoint and request.endpoint != "metrics":
+        _prom_api_requests.labels(endpoint=request.endpoint).inc()
+    return response
 
 
 
@@ -414,6 +445,10 @@ def ingest():
     with _lock:
         _last_post = datetime.now(timezone.utc)
     parsed, aircraft, lags = _ingest(messages)
+    _prom_messages_received.inc(len(messages))
+    _prom_messages_parsed.inc(parsed)
+    for lag in lags:
+        _prom_message_lag.observe(lag)
     if lags:
         lag_info = f"  lag min/avg/max: {min(lags):.1f}/{sum(lags)/len(lags):.1f}/{max(lags):.1f}s"
     else:
@@ -591,6 +626,11 @@ def download_db():
         download_name="flighttracker.db",
         mimetype="application/octet-stream",
     )
+
+
+@app.route("/metrics")
+def metrics():
+    return generate_latest(), 200, {"Content-Type": CONTENT_TYPE_LATEST}
 
 
 @app.route("/")
