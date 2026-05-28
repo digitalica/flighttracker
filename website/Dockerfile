@@ -1,15 +1,18 @@
-FROM python:3.12-slim
+FROM node:20-slim
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY src/ src/
+COPY tsconfig.json ./
+RUN npm run build && npm prune --omit=dev
 
 ENV DB_PATH=/data/flighttracker.db
 EXPOSE 5000
 
 COPY templates/ templates/
 COPY static/ static/
-COPY server.py ./
 
-CMD ["gunicorn", "--workers", "1", "--threads", "4", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "server:app"]
+CMD ["node", "dist/server.js"]
