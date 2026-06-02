@@ -28,7 +28,7 @@ SBS_PORT = 30003
 
 SERVER_URL = "https://phtgc.nl/sbs"
 SEND_INTERVAL = 1        # seconds between POSTs
-BATCH_MAX = 10           # max messages per batch
+BATCH_MAX = 100          # max messages per backlog catch-up batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
 HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
 CATCHUP_FACTOR = 10      # backlog batches are this many times larger than normal
@@ -217,12 +217,11 @@ def send_loop():
             _prune_backlog()
             last_prune = time.monotonic()
 
-        # Drain fresh messages from the in-memory buffer
+        # Drain all fresh messages from the in-memory buffer
         with _lock:
-            batch = []
-            while _buffer and len(batch) < BATCH_MAX:
-                batch.append(_buffer.popleft())
-            _buffer_size.set(len(_buffer))
+            batch = list(_buffer)
+            _buffer.clear()
+            _buffer_size.set(0)
 
         ids, backlog_msgs = _peek_backlog(BATCH_MAX * CATCHUP_FACTOR)
 
