@@ -21,6 +21,7 @@ from collections import deque
 from pathlib import Path
 
 import requests
+from prometheus_client import Counter, Gauge, start_http_server
 
 SBS_HOST = "localhost"
 SBS_PORT = 30003
@@ -31,6 +32,8 @@ BATCH_MAX = 10           # max messages per batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
 HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
 CATCHUP_FACTOR = 10      # backlog batches are this many times larger than normal
+
+METRICS_PORT = 9877
 
 MAX_BACKLOG_DAYS = 7
 PERSIST_PATH = Path(os.environ.get("FEEDER_DB", Path(__file__).parent / "pending.db"))
@@ -90,6 +93,14 @@ log = logging.getLogger(__name__)
 
 _buffer: deque[str] = deque()
 _lock = threading.Lock()
+
+_sbs_connected   = Gauge('feeder_sbs_connected',        '1 if currently connected to the SBS stream')
+_buffer_size     = Gauge('feeder_buffer_size',           'In-memory message buffer size')
+_backlog_size    = Gauge('feeder_backlog_size',          'Messages pending in SQLite backlog')
+_messages_read   = Counter('feeder_messages_read_total', 'SBS messages read from stream (all aircraft)')
+_target_messages = Counter('feeder_target_messages_total', 'Target aircraft messages added to buffer')
+_messages_sent   = Counter('feeder_messages_sent_total', 'Messages successfully sent to server')
+_send_failures   = Counter('feeder_send_failures_total', 'Failed POST attempts to server')
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +168,7 @@ def read_sbs():
             log.info(f"Connecting to SBS stream at {SBS_HOST}:{SBS_PORT}")
             with socket.create_connection((SBS_HOST, SBS_PORT), timeout=30) as sock:
                 log.info("Connected to SBS stream")
+                _sbs_connected.set(1)
                 buf = ""
                 while True:
                     chunk = sock.recv(4096).decode("ascii", errors="replace")
@@ -169,10 +181,15 @@ def read_sbs():
                     with _lock:
                         for line in lines:
                             line = line.strip()
-                            if line and _is_target(line):
+                            if not line:
+                                continue
+                            _messages_read.inc()
+                            if _is_target(line):
                                 _buffer.append(line)
+                                _target_messages.inc()
         except (OSError, socket.timeout) as exc:
             log.warning(f"SBS connection error: {exc}")
+        _sbs_connected.set(0)
         log.info(f"Reconnecting in {RECONNECT_DELAY}s ...")
         time.sleep(RECONNECT_DELAY)
 
@@ -205,6 +222,7 @@ def send_loop():
             batch = []
             while _buffer and len(batch) < BATCH_MAX:
                 batch.append(_buffer.popleft())
+            _buffer_size.set(len(_buffer))
 
         ids, backlog_msgs = _peek_backlog(BATCH_MAX * CATCHUP_FACTOR)
 
@@ -216,8 +234,10 @@ def send_loop():
                 resp = requests.post(SERVER_URL, json={"messages": combined}, timeout=10)
                 resp.raise_for_status()
                 _ack_backlog(ids)
+                _messages_sent.inc(len(combined))
                 last_send = time.monotonic()
                 remaining = _backlog_size()
+                _backlog_size.set(remaining)
                 log.info(
                     f"Backlog: sent {len(backlog_msgs)} + {len(batch)} fresh"
                     f" -> HTTP {resp.status_code}"
@@ -225,6 +245,7 @@ def send_loop():
                 )
             except requests.exceptions.RequestException as exc:
                 log.warning(f"Backlog send failed (server still unreachable): {exc}")
+                _send_failures.inc()
                 if batch:
                     _enqueue_backlog(batch)
             continue
@@ -237,6 +258,7 @@ def send_loop():
         try:
             resp = requests.post(SERVER_URL, json={"messages": batch}, timeout=10)
             resp.raise_for_status()
+            _messages_sent.inc(len(batch))
             last_send = time.monotonic()
             if batch:
                 log.info(f"Sent {len(batch)} messages -> HTTP {resp.status_code}")
@@ -244,6 +266,7 @@ def send_loop():
                 log.info(f"Heartbeat -> HTTP {resp.status_code}")
         except requests.exceptions.RequestException as exc:
             log.warning(f"Failed to send batch: {exc}")
+            _send_failures.inc()
             if batch:
                 _enqueue_backlog(batch)
 
@@ -259,6 +282,8 @@ def main():
     log.info(f"Backlog DB   : {PERSIST_PATH}")
     log.info(f"Tracking     : {', '.join(sorted(TARGET_HEXES))}")
     log.info(f"Send interval: {SEND_INTERVAL}s")
+    start_http_server(METRICS_PORT)
+    log.info(f"Metrics      : http://0.0.0.0:{METRICS_PORT}")
 
     reader = threading.Thread(target=read_sbs, daemon=True, name="sbs-reader")
     reader.start()
