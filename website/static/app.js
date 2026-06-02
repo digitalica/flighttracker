@@ -300,7 +300,7 @@ function buildChart() {
           display: true,
           text: '',
           color: '#aaa',
-          font: { size: 12, family: 'monospace' },
+          font: { size: 18, family: 'monospace', weight: 'bold' },
           padding: { bottom: 10 },
         },
         tooltip: {
@@ -329,19 +329,19 @@ function buildChart() {
             tooltipFormat: 'HH:mm:ss',
             displayFormats: { minute: 'HH:mm', hour: 'HH:mm' }
           },
-          title: { display: true, text: RLABEL[mins], color: '#ddd', font: { size: 11, family: 'monospace' } },
-          ticks: { color: '#ddd', maxTicksLimit: 8, font: { family: 'monospace', size: 11 } },
+          title: { display: true, text: RLABEL[mins], color: '#ddd', font: { size: 17, family: 'monospace', weight: 'bold' } },
+          ticks: { color: '#ddd', maxTicksLimit: 8, font: { family: 'monospace', size: 17, weight: 'bold' } },
           grid: { color: '#1a1a1a' },
         },
         y: {
-          title: { display: true, text: 'ft/min', color: '#666', font: { size: 11, family: 'monospace' } },
-          ticks: { color: '#666', font: { family: 'monospace', size: 11 } },
+          title: { display: true, text: 'ft/min', color: '#666', font: { size: 17, family: 'monospace', weight: 'bold' } },
+          ticks: { color: '#666', font: { family: 'monospace', size: 17, weight: 'bold' } },
           grid: { drawOnChartArea: false },
         },
         y2: {
           position: 'right',
-          title: { display: true, text: yLabel(), color: '#4a9eff', font: { size: 11, family: 'monospace' } },
-          ticks: { color: '#4a9eff', font: { family: 'monospace', size: 11 } },
+          title: { display: true, text: yLabel(), color: '#4a9eff', font: { size: 17, family: 'monospace', weight: 'bold' } },
+          ticks: { color: '#4a9eff', font: { family: 'monospace', size: 17, weight: 'bold' } },
           grid: { color: '#1a1a1a' },
         }
       }
