@@ -128,6 +128,12 @@ _prom_api_requests = Counter(
     ["endpoint"],
 )
 
+# Pre-initialise all known endpoints so they appear in /metrics from startup
+for _ep in ("ingest", "list_aircraft", "status", "altitude", "events",
+            "current_altitude", "download_db", "index",
+            "robots", "sitemap", "metrics"):
+    _prom_api_requests.labels(endpoint=_ep)
+
 
 @app.after_request
 def _count_request(response):
