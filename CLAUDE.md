@@ -32,6 +32,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 48462C   | PH-SKC       | Reims-Cessna F172N Skyhawk  |                              |
 | 48459C   | PH-VHA       | Tecnam P2002JF Sierra       | Vliegschool Hilversum        |
 | 4845F0   | PH-VHD       | Tecnam P-2002 Sierra        | Vliegschool Hilversum        |
+| 484608   | PH-JBC       | Cessna 172 Skyhawk          |                              |
 | 484655   | PH-CBN       | Reims-Cessna F172N Skyhawk  |                              |
 | 48481F   | PH-WMA       | Reims-Cessna F172P Skyhawk  |                              |
 | 486237   | PH-VHY       | Cessna 172P Skyhawk         | Vliegschool Hilversum        |
