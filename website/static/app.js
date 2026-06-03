@@ -418,7 +418,9 @@ async function refresh() {
   chart.options.scales.x.min = new Date(now - mins * 60 * 1000);
   chart.options.scales.x.max = now;
   const altVals = data.map(d => d[key]).filter(v => v != null);
-  chart.options.scales.y2.min = altVals.length && altVals.every(v => v >= 0) ? 0 : undefined;
+  const altMin = altVals.length ? Math.min(...altVals) : 0;
+  chart.options.scales.y2.min = altMin >= 0 ? 0 : undefined;
+  chart.options.scales.y2.suggestedMax = 1000;
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
   chart.options.scales.y.min = -maxAbs;
   chart.options.scales.y.max =  maxAbs;
