@@ -37,7 +37,7 @@ function showView(name) {
   document.getElementById('nav-events').className    = name === 'events'    ? 'active' : '';
   document.getElementById('nav-altimeter').className = name === 'altimeter' ? 'active' : '';
   document.getElementById('nav-about').className     = name === 'about'     ? 'active' : '';
-  if (name === 'altimeter') drawAltimeter(lastAgl);
+  if (name === 'altimeter') animateAltimeter(lastAgl);
   document.getElementById('nav').style.display = 'none';
   updateUrl();
   if (name === 'altitude' && chart) chart.resize();
@@ -453,7 +453,7 @@ async function refresh() {
   document.getElementById('events-subtitle').textContent    = lastSeenLabel(hex);
   document.getElementById('altimeter-title').textContent    = regSuffix() + arrow;
   document.getElementById('altimeter-subtitle').textContent = lastSeenLabel(hex);
-  if (currentView === 'altimeter') drawAltimeter(lastAgl);
+  if (currentView === 'altimeter') animateAltimeter(lastAgl);
 }
 
 // ── Events view ───────────────────────────────────────────────────────────────
@@ -522,6 +522,31 @@ function renderEvents(evs, aglOffset) {
 }
 
 // ── Altimeter ────────────────────────────────────────────────────────────────
+
+let _altCurrent = null;   // altitude currently rendered on the dial
+let _altTarget  = null;   // altitude we are animating towards
+let _altAnimId  = null;   // requestAnimationFrame handle
+
+function animateAltimeter(target) {
+  _altTarget = target;
+  if (_altAnimId) { cancelAnimationFrame(_altAnimId); _altAnimId = null; }
+  if (target == null) { _altCurrent = null; drawAltimeter(null); return; }
+  if (_altCurrent == null) { _altCurrent = target; drawAltimeter(target); return; }
+
+  const from  = _altCurrent;
+  const start = performance.now();
+  const DURATION = 600; // ms
+
+  function step(now) {
+    const t    = Math.min(1, (now - start) / DURATION);
+    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
+    _altCurrent = from + (target - from) * ease;
+    drawAltimeter(_altCurrent);
+    _altAnimId = t < 1 ? requestAnimationFrame(step) : null;
+    if (t >= 1) _altCurrent = target;
+  }
+  _altAnimId = requestAnimationFrame(step);
+}
 
 function drawAltimeter(agl) {
   const canvas = document.getElementById('altimeter-canvas');
