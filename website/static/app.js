@@ -66,6 +66,7 @@ const STATUS_COLOR  = { active: '#5c5', sleeping: '#fa4', inactive: '#444' };
 
 function flightTimeStr(startDate) {
   const totalMins = Math.floor((Date.now() - startDate) / 60_000);
+  if (totalMins === 0) return '';
   const h = Math.floor(totalMins / 60);
   const m = totalMins % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
@@ -74,7 +75,8 @@ function flightTimeStr(startDate) {
 function lastSeenLabel(h) {
   const s = acStatus(h);
   if (s === 'active') {
-    const ft  = lastTakeoffTs ? `, ${flightTimeStr(lastTakeoffTs)}` : '';
+    const ftStr = lastTakeoffTs ? flightTimeStr(lastTakeoffTs) : '';
+    const ft  = ftStr ? `, ${ftStr}` : '';
     const alt = lastAgl != null ? `  ${lastAgl} ft AGL` : '';
     return `now${ft}${alt}`;
   }
