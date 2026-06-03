@@ -29,12 +29,15 @@ function climbArrow(roc) {
 // ── View switching ────────────────────────────────────────────────────────────
 function showView(name) {
   currentView = name;
-  document.getElementById('view-altitude').style.display = name === 'altitude' ? 'block' : 'none';
-  document.getElementById('view-events').style.display   = name === 'events'   ? 'block' : 'none';
-  document.getElementById('view-about').style.display    = name === 'about'    ? 'block' : 'none';
-  document.getElementById('nav-altitude').className = name === 'altitude' ? 'active' : '';
-  document.getElementById('nav-events').className   = name === 'events'   ? 'active' : '';
-  document.getElementById('nav-about').className    = name === 'about'    ? 'active' : '';
+  document.getElementById('view-altitude').style.display  = name === 'altitude'  ? 'block' : 'none';
+  document.getElementById('view-events').style.display    = name === 'events'    ? 'block' : 'none';
+  document.getElementById('view-altimeter').style.display = name === 'altimeter' ? 'block' : 'none';
+  document.getElementById('view-about').style.display     = name === 'about'     ? 'block' : 'none';
+  document.getElementById('nav-altitude').className  = name === 'altitude'  ? 'active' : '';
+  document.getElementById('nav-events').className    = name === 'events'    ? 'active' : '';
+  document.getElementById('nav-altimeter').className = name === 'altimeter' ? 'active' : '';
+  document.getElementById('nav-about').className     = name === 'about'     ? 'active' : '';
+  if (name === 'altimeter') drawAltimeter(lastAgl);
   document.getElementById('nav').style.display = 'none';
   updateUrl();
   if (name === 'altitude' && chart) chart.resize();
@@ -190,6 +193,10 @@ document.addEventListener('click', e => {
 });
 
 document.getElementById('events-title').addEventListener('click', toggleEventsPicker);
+document.getElementById('altimeter-title').addEventListener('click', () => {
+  const r = document.getElementById('altimeter-title').getBoundingClientRect();
+  _openPicker(r, v => { hex = v; pushUrlState(); refresh(); });
+});
 
 // ── URL state ─────────────────────────────────────────────────────────────────
 function readUrlState() {
@@ -203,7 +210,7 @@ function readUrlState() {
   if (RANGES.includes(minsParam)) mins = minsParam;
   if (p.has('agl')) useAGL = p.get('agl') === '1';
   const view = p.get('view');
-  if (view === 'events' || view === 'about') currentView = view;
+  if (['events', 'altimeter', 'about'].includes(view)) currentView = view;
 }
 
 function updateUrl() {
@@ -433,8 +440,11 @@ async function refresh() {
   chart.update('none');
   updateDataStatus();
 
-  document.getElementById('events-title').textContent    = regSuffix() + arrow;
-  document.getElementById('events-subtitle').textContent = lastSeenLabel(hex);
+  document.getElementById('events-title').textContent       = regSuffix() + arrow;
+  document.getElementById('events-subtitle').textContent    = lastSeenLabel(hex);
+  document.getElementById('altimeter-title').textContent    = regSuffix() + arrow;
+  document.getElementById('altimeter-subtitle').textContent = lastSeenLabel(hex);
+  if (currentView === 'altimeter') drawAltimeter(lastAgl);
 }
 
 // ── Events view ───────────────────────────────────────────────────────────────
@@ -500,6 +510,93 @@ function renderEvents(evs, aglOffset) {
   }
   html += '</table>';
   el.innerHTML = html;
+}
+
+// ── Altimeter ────────────────────────────────────────────────────────────────
+
+function drawAltimeter(agl) {
+  const canvas = document.getElementById('altimeter-canvas');
+  const s = canvas.width;
+  const cx = s / 2, cy = s / 2, r = s * 0.44;
+  const c = canvas.getContext('2d');
+
+  c.clearRect(0, 0, s, s);
+
+  // Outer bezel
+  c.beginPath(); c.arc(cx, cy, r + 10, 0, Math.PI * 2);
+  c.strokeStyle = '#333'; c.lineWidth = 18; c.stroke();
+
+  // Face
+  c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2);
+  c.fillStyle = '#111'; c.fill();
+  c.strokeStyle = '#555'; c.lineWidth = 3; c.stroke();
+
+  // Tick marks and labels (0-9 clockwise, each division = 1000 ft)
+  for (let i = 0; i < 100; i++) {
+    const angle  = (i / 100) * Math.PI * 2 - Math.PI / 2;
+    const major  = i % 10 === 0;
+    const mid    = i % 5  === 0 && !major;
+    const len    = major ? r * 0.16 : mid ? r * 0.10 : r * 0.05;
+    const outerR = r - 3;
+    c.beginPath();
+    c.moveTo(cx + Math.cos(angle) * outerR,       cy + Math.sin(angle) * outerR);
+    c.lineTo(cx + Math.cos(angle) * (outerR - len), cy + Math.sin(angle) * (outerR - len));
+    c.strokeStyle = major ? '#ddd' : mid ? '#777' : '#333';
+    c.lineWidth   = major ? 3 : 1;
+    c.stroke();
+
+    if (major) {
+      const lr = r * 0.73;
+      c.fillStyle = '#ccc';
+      c.font = `bold ${Math.round(r * 0.11)}px monospace`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(String(i / 10), cx + Math.cos(angle) * lr, cy + Math.sin(angle) * lr);
+    }
+  }
+
+  if (agl == null) {
+    c.fillStyle = '#444';
+    c.font = `${Math.round(r * 0.10)}px monospace`;
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('no data', cx, cy);
+    return;
+  }
+
+  const ft = Math.max(0, agl);
+
+  // Thousands needle — short, wide; 1 full rotation = 10 000 ft
+  const kAngle = (ft / 10000) * Math.PI * 2 - Math.PI / 2;
+  c.save(); c.translate(cx, cy); c.rotate(kAngle + Math.PI / 2);
+  c.beginPath();
+  c.moveTo(0, r * 0.18);
+  c.lineTo(-r * 0.04, 0);
+  c.lineTo(0, -r * 0.48);
+  c.lineTo( r * 0.04, 0);
+  c.closePath();
+  c.fillStyle = '#888'; c.fill();
+  c.restore();
+
+  // Hundreds needle — long, thin; 1 full rotation = 1 000 ft
+  const hAngle = ((ft % 1000) / 1000) * Math.PI * 2 - Math.PI / 2;
+  c.save(); c.translate(cx, cy); c.rotate(hAngle + Math.PI / 2);
+  c.beginPath();
+  c.moveTo(0, r * 0.22);
+  c.lineTo(-r * 0.025, 0);
+  c.lineTo(0, -r * 0.72);
+  c.lineTo( r * 0.025, 0);
+  c.closePath();
+  c.fillStyle = '#fff'; c.fill();
+  c.restore();
+
+  // Centre cap
+  c.beginPath(); c.arc(cx, cy, r * 0.045, 0, Math.PI * 2);
+  c.fillStyle = '#aaa'; c.fill();
+
+  // Digital readout
+  c.fillStyle = '#4a9eff';
+  c.font = `bold ${Math.round(r * 0.13)}px monospace`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(`${ft} ft`, cx, cy + r * 0.38);
 }
 
 // ── NATO phonetic alphabet ────────────────────────────────────────────────────
