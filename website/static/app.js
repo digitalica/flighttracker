@@ -635,11 +635,11 @@ function _drawSkydive(agl) {
 
   const ftToAngle = ft => (ft / MAX_FT) * Math.PI * 2 - Math.PI / 2;
 
-  // Coloured zone arcs (proportional: red 0-3k, amber 3k-6k, green 6k-12k)
+  // Coloured zone arcs
   const zones = [
-    { from: 0,    to: 3000,  color: '#8b0000' },
-    { from: 3000, to: 6000,  color: '#b8860b' },
-    { from: 6000, to: 12000, color: '#1a5c1a' },
+    { from: 0,    to: 2500,  color: '#8b0000' },
+    { from: 2500, to: 3500,  color: '#b8860b' },
+    { from: 3500, to: 12000, color: '#1a5c1a' },
   ];
   const arcR = r * 0.87, arcW = r * 0.11;
   zones.forEach(z => {
