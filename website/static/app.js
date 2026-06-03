@@ -180,23 +180,32 @@ function toggleEventsPicker() {
 }
 
 document.addEventListener('click', e => {
-  const picker = document.getElementById('picker');
-  const canvas = document.getElementById('chart');
-  const evTitle = document.getElementById('events-title');
+  const picker    = document.getElementById('picker');
+  const canvas    = document.getElementById('chart');
+  const evTitle   = document.getElementById('events-title');
+  const altTitle  = document.getElementById('altimeter-title');
   if (picker.style.display === 'block'
       && !picker.contains(e.target)
       && e.target !== canvas
-      && e.target !== evTitle) {
+      && e.target !== evTitle
+      && e.target !== altTitle) {
     clearTimeout(pickerTimer);
     picker.style.display = 'none';
   }
 });
 
+function toggleAltimeterPicker() {
+  const picker = document.getElementById('picker');
+  if (picker.style.display === 'block') { clearTimeout(pickerTimer); picker.style.display = 'none'; return; }
+  const anchor = document.getElementById('altimeter-title');
+  _openPicker(anchor.getBoundingClientRect(), () => {
+    lastRoc = 0;
+    refresh();
+  });
+}
+
 document.getElementById('events-title').addEventListener('click', toggleEventsPicker);
-document.getElementById('altimeter-title').addEventListener('click', () => {
-  const r = document.getElementById('altimeter-title').getBoundingClientRect();
-  _openPicker(r, v => { hex = v; pushUrlState(); refresh(); });
-});
+document.getElementById('altimeter-title').addEventListener('click', toggleAltimeterPicker);
 
 // ── URL state ─────────────────────────────────────────────────────────────────
 function readUrlState() {
@@ -591,12 +600,6 @@ function drawAltimeter(agl) {
   // Centre cap
   c.beginPath(); c.arc(cx, cy, r * 0.045, 0, Math.PI * 2);
   c.fillStyle = '#aaa'; c.fill();
-
-  // Digital readout
-  c.fillStyle = '#4a9eff';
-  c.font = `bold ${Math.round(r * 0.13)}px monospace`;
-  c.textAlign = 'center'; c.textBaseline = 'middle';
-  c.fillText(`${ft} ft`, cx, cy + r * 0.38);
 }
 
 // ── NATO phonetic alphabet ────────────────────────────────────────────────────
