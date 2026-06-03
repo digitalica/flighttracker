@@ -482,7 +482,7 @@ function renderEvents(evs, aglOffset) {
     rows.push({ ev, t, dur });
   }
 
-  let html = `<div style="color:#555;margin-bottom:12px;font-size:11px;">AGL offset: ${aglOffset} ft</div>`;
+  let html = `<div style="color:#555;margin-bottom:12px;font-size:15px;">AGL offset: ${aglOffset} ft</div>`;
   html += '<table>';
   for (const { ev, t, dur } of [...rows].reverse()) {
     const time = t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
