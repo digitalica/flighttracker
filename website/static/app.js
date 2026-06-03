@@ -220,10 +220,11 @@ function readUrlState() {
   if (p.has('agl')) useAGL = p.get('agl') === '1';
   const view = p.get('view');
   if (['events', 'altimeter', 'about'].includes(view)) currentView = view;
+  if (p.get('alti') === 'skydive') altimeterMode = 'skydive';
 }
 
 function updateUrl() {
-  const p = new URLSearchParams({ ac: reg(), mins, agl: useAGL ? '1' : '0', view: currentView });
+  const p = new URLSearchParams({ ac: reg(), mins, agl: useAGL ? '1' : '0', view: currentView, alti: altimeterMode });
   history.replaceState(null, '', '?' + p.toString());
 }
 
@@ -530,6 +531,7 @@ let altimeterMode  = 'aviation'; // 'aviation' | 'skydive'
 
 document.getElementById('altimeter-canvas').addEventListener('click', () => {
   altimeterMode = altimeterMode === 'aviation' ? 'skydive' : 'aviation';
+  updateUrl();
   drawAltimeter(_altCurrent ?? lastAgl);
 });
 
