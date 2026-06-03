@@ -523,9 +523,15 @@ function renderEvents(evs, aglOffset) {
 
 // ── Altimeter ────────────────────────────────────────────────────────────────
 
-let _altCurrent = null;   // altitude currently rendered on the dial
-let _altTarget  = null;   // altitude we are animating towards
-let _altAnimId  = null;   // requestAnimationFrame handle
+let _altCurrent    = null;       // altitude currently rendered on the dial
+let _altTarget     = null;       // altitude we are animating towards
+let _altAnimId     = null;       // requestAnimationFrame handle
+let altimeterMode  = 'aviation'; // 'aviation' | 'skydive'
+
+document.getElementById('altimeter-canvas').addEventListener('click', () => {
+  altimeterMode = altimeterMode === 'aviation' ? 'skydive' : 'aviation';
+  drawAltimeter(_altCurrent ?? lastAgl);
+});
 
 function animateAltimeter(target) {
   _altTarget = target;
@@ -535,11 +541,11 @@ function animateAltimeter(target) {
 
   const from  = _altCurrent;
   const start = performance.now();
-  const DURATION = 600; // ms
+  const DURATION = 600;
 
   function step(now) {
     const t    = Math.min(1, (now - start) / DURATION);
-    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; // ease-in-out
+    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     _altCurrent = from + (target - from) * ease;
     drawAltimeter(_altCurrent);
     _altAnimId = t < 1 ? requestAnimationFrame(step) : null;
@@ -548,37 +554,56 @@ function animateAltimeter(target) {
   _altAnimId = requestAnimationFrame(step);
 }
 
-function drawAltimeter(agl) {
-  const canvas = document.getElementById('altimeter-canvas');
-  const s = canvas.width;
-  const cx = s / 2, cy = s / 2, r = s * 0.44;
-  const c = canvas.getContext('2d');
-
-  c.clearRect(0, 0, s, s);
-
-  // Outer bezel
+function _drawBezel(c, cx, cy, r) {
   c.beginPath(); c.arc(cx, cy, r + 10, 0, Math.PI * 2);
   c.strokeStyle = '#333'; c.lineWidth = 18; c.stroke();
-
-  // Face
   c.beginPath(); c.arc(cx, cy, r, 0, Math.PI * 2);
   c.fillStyle = '#111'; c.fill();
   c.strokeStyle = '#555'; c.lineWidth = 3; c.stroke();
+}
 
-  // Tick marks and labels (0-9 clockwise, each division = 1000 ft)
+function _drawNeedle(c, cx, cy, r, angle, len, tailLen, width, color) {
+  c.save(); c.translate(cx, cy); c.rotate(angle + Math.PI / 2);
+  c.beginPath();
+  c.moveTo(0,  tailLen);
+  c.lineTo(-width, 0);
+  c.lineTo(0, -len);
+  c.lineTo( width, 0);
+  c.closePath();
+  c.fillStyle = color; c.fill();
+  c.restore();
+}
+
+function _drawCap(c, cx, cy, r) {
+  c.beginPath(); c.arc(cx, cy, r * 0.045, 0, Math.PI * 2);
+  c.fillStyle = '#aaa'; c.fill();
+}
+
+function _drawNoData(c, cx, cy, r) {
+  c.fillStyle = '#444';
+  c.font = `${Math.round(r * 0.10)}px monospace`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('no data', cx, cy);
+}
+
+function drawAltimeter(agl) {
+  if (altimeterMode === 'skydive') { _drawSkydive(agl); return; }
+
+  const canvas = document.getElementById('altimeter-canvas');
+  const s = canvas.width, cx = s / 2, cy = s / 2, r = s * 0.44;
+  const c = canvas.getContext('2d');
+  c.clearRect(0, 0, s, s);
+  _drawBezel(c, cx, cy, r);
+
   for (let i = 0; i < 100; i++) {
     const angle  = (i / 100) * Math.PI * 2 - Math.PI / 2;
-    const major  = i % 10 === 0;
-    const mid    = i % 5  === 0 && !major;
+    const major  = i % 10 === 0, mid = i % 5 === 0 && !major;
     const len    = major ? r * 0.16 : mid ? r * 0.10 : r * 0.05;
-    const outerR = r - 3;
     c.beginPath();
-    c.moveTo(cx + Math.cos(angle) * outerR,       cy + Math.sin(angle) * outerR);
-    c.lineTo(cx + Math.cos(angle) * (outerR - len), cy + Math.sin(angle) * (outerR - len));
+    c.moveTo(cx + Math.cos(angle) * (r - 3),       cy + Math.sin(angle) * (r - 3));
+    c.lineTo(cx + Math.cos(angle) * (r - 3 - len), cy + Math.sin(angle) * (r - 3 - len));
     c.strokeStyle = major ? '#ddd' : mid ? '#777' : '#333';
-    c.lineWidth   = major ? 3 : 1;
-    c.stroke();
-
+    c.lineWidth   = major ? 3 : 1; c.stroke();
     if (major) {
       const lr = r * 0.73;
       c.fillStyle = '#ccc';
@@ -588,43 +613,68 @@ function drawAltimeter(agl) {
     }
   }
 
-  if (agl == null) {
-    c.fillStyle = '#444';
-    c.font = `${Math.round(r * 0.10)}px monospace`;
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('no data', cx, cy);
-    return;
+  // Mode label
+  c.fillStyle = '#333'; c.font = `${Math.round(r * 0.07)}px monospace`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('aviation', cx, cy + r * 0.52);
+
+  if (agl == null) { _drawNoData(c, cx, cy, r); return; }
+  const ft = Math.max(0, agl);
+  _drawNeedle(c, cx, cy, r, (ft / 10000) * Math.PI * 2 - Math.PI / 2, r * 0.48, r * 0.18, r * 0.04, '#888');
+  _drawNeedle(c, cx, cy, r, ((ft % 1000) / 1000) * Math.PI * 2 - Math.PI / 2, r * 0.72, r * 0.22, r * 0.025, '#fff');
+  _drawCap(c, cx, cy, r);
+}
+
+function _drawSkydive(agl) {
+  const MAX_FT = 12000;
+  const canvas = document.getElementById('altimeter-canvas');
+  const s = canvas.width, cx = s / 2, cy = s / 2, r = s * 0.44;
+  const c = canvas.getContext('2d');
+  c.clearRect(0, 0, s, s);
+  _drawBezel(c, cx, cy, r);
+
+  const ftToAngle = ft => (ft / MAX_FT) * Math.PI * 2 - Math.PI / 2;
+
+  // Coloured zone arcs (proportional: red 0-3k, amber 3k-6k, green 6k-12k)
+  const zones = [
+    { from: 0,    to: 3000,  color: '#8b0000' },
+    { from: 3000, to: 6000,  color: '#b8860b' },
+    { from: 6000, to: 12000, color: '#1a5c1a' },
+  ];
+  const arcR = r * 0.87, arcW = r * 0.11;
+  zones.forEach(z => {
+    c.beginPath();
+    c.arc(cx, cy, arcR, ftToAngle(z.from), ftToAngle(z.to));
+    c.strokeStyle = z.color; c.lineWidth = arcW; c.stroke();
+  });
+
+  // Ticks every 500 ft (minor) and 1000 ft (major); skip label at 12000 (overlaps 0)
+  for (let ft = 0; ft < MAX_FT; ft += 500) {
+    const angle = ftToAngle(ft);
+    const major = ft % 1000 === 0;
+    const len   = major ? r * 0.16 : r * 0.08;
+    c.beginPath();
+    c.moveTo(cx + Math.cos(angle) * (r - 3),       cy + Math.sin(angle) * (r - 3));
+    c.lineTo(cx + Math.cos(angle) * (r - 3 - len), cy + Math.sin(angle) * (r - 3 - len));
+    c.strokeStyle = major ? '#ddd' : '#555'; c.lineWidth = major ? 3 : 1; c.stroke();
+    if (major) {
+      const lr = r * 0.71;
+      c.fillStyle = '#ccc';
+      c.font = `bold ${Math.round(r * 0.085)}px monospace`;
+      c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText(String(ft / 1000), cx + Math.cos(angle) * lr, cy + Math.sin(angle) * lr);
+    }
   }
 
-  const ft = Math.max(0, agl);
+  // Mode label
+  c.fillStyle = '#333'; c.font = `${Math.round(r * 0.07)}px monospace`;
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText('skydive', cx, cy + r * 0.52);
 
-  // Thousands needle — short, wide; 1 full rotation = 10 000 ft
-  const kAngle = (ft / 10000) * Math.PI * 2 - Math.PI / 2;
-  c.save(); c.translate(cx, cy); c.rotate(kAngle + Math.PI / 2);
-  c.beginPath();
-  c.moveTo(0, r * 0.18);
-  c.lineTo(-r * 0.04, 0);
-  c.lineTo(0, -r * 0.48);
-  c.lineTo( r * 0.04, 0);
-  c.closePath();
-  c.fillStyle = '#888'; c.fill();
-  c.restore();
-
-  // Hundreds needle — long, thin; 1 full rotation = 1 000 ft
-  const hAngle = ((ft % 1000) / 1000) * Math.PI * 2 - Math.PI / 2;
-  c.save(); c.translate(cx, cy); c.rotate(hAngle + Math.PI / 2);
-  c.beginPath();
-  c.moveTo(0, r * 0.22);
-  c.lineTo(-r * 0.025, 0);
-  c.lineTo(0, -r * 0.72);
-  c.lineTo( r * 0.025, 0);
-  c.closePath();
-  c.fillStyle = '#fff'; c.fill();
-  c.restore();
-
-  // Centre cap
-  c.beginPath(); c.arc(cx, cy, r * 0.045, 0, Math.PI * 2);
-  c.fillStyle = '#aaa'; c.fill();
+  if (agl == null) { _drawNoData(c, cx, cy, r); return; }
+  const ft = Math.max(0, Math.min(MAX_FT, agl));
+  _drawNeedle(c, cx, cy, r, ftToAngle(ft), r * 0.74, r * 0.22, r * 0.032, '#fff');
+  _drawCap(c, cx, cy, r);
 }
 
 // ── NATO phonetic alphabet ────────────────────────────────────────────────────
