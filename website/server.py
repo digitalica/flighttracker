@@ -496,6 +496,18 @@ def status():
 @app.route("/api/altitude/<icao_hex>")
 def altitude(icao_hex: str):
     minutes = request.args.get("minutes", 30, type=int)
+
+    if "fake" in request.args:
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=minutes)
+        fake_rows = []
+        t = start
+        while t <= now:
+            alt = int(t.second / 59 * 6000)
+            fake_rows.append({"t": t.isoformat(), "baro": alt, "agl": alt, "roc": 0})
+            t += timedelta(seconds=10)
+        return jsonify({"session_start": start.isoformat(), "points": fake_rows})
+
     since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
 
     with _db() as conn:
