@@ -122,7 +122,14 @@ function _resetPickerTimer() {
 
 function _openPicker(anchorRect, onSelect) {
   const picker = document.getElementById('picker');
-  const sorted = [...aircraft].sort((a, b) => a.registration.localeCompare(b.registration));
+  const statusRank = { active: 1, sleeping: 2, inactive: 3 };
+  const sorted = [...aircraft].sort((a, b) => {
+    if (a.hex === '484763') return -1;
+    if (b.hex === '484763') return  1;
+    const sr = statusRank[acStatus(a.hex)] - statusRank[acStatus(b.hex)];
+    if (sr !== 0) return sr;
+    return a.registration.localeCompare(b.registration);
+  });
   picker.innerHTML = sorted.map(a => {
     const s = acStatus(a.hex);
     return `<div class="${a.hex === hex ? 'active' : ''}" data-hex="${a.hex}">` +
