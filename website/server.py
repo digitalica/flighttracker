@@ -580,6 +580,17 @@ def current_altitude():
         ac.lower() if ac.lower() in TARGET_AIRCRAFT else "484763",
     )
     registration = TARGET_AIRCRAFT.get(icao_hex, icao_hex)
+    simple = "simple" in request.args
+
+    if "fake" in request.args:
+        now  = datetime.now(timezone.utc)
+        agl  = int(now.second / 59 * 6000)
+        ts   = now.isoformat()
+        if simple:
+            return str(agl) + "\n", 200, {"Content-Type": "text/plain"}
+        return jsonify({"registration": registration, "hex": icao_hex,
+                        "agl": agl, "baro": agl, "agl_offset": 0,
+                        "ts": ts, "age_secs": 0})
 
     since_today = datetime.now(timezone.utc).replace(
         hour=0, minute=0, second=0, microsecond=0
@@ -594,8 +605,6 @@ def current_altitude():
             """,
             (icao_hex, since_today),
         ).fetchall()
-
-    simple = "simple" in request.args
 
     if not rows:
         return ("null\n", 200, {"Content-Type": "text/plain"}) if simple else \
