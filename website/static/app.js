@@ -779,6 +779,7 @@ async function init() {
   await refresh();
   setInterval(refresh, 5000);
   setInterval(() => { if (currentView === 'events') refreshEvents(); }, 5000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 
 init();
