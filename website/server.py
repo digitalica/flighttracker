@@ -583,9 +583,14 @@ def current_altitude():
     simple = "simple" in request.args
 
     if "fake" in request.args:
-        now  = datetime.now(timezone.utc)
-        agl  = int(now.second / 59 * 6000)
-        ts   = now.isoformat()
+        now = datetime.now(timezone.utc)
+        if now.minute % 2 == 1:
+            if simple:
+                return "null\n", 200, {"Content-Type": "text/plain"}
+            return jsonify({"registration": registration, "hex": icao_hex,
+                            "agl": None, "baro": None, "ts": None, "age_secs": None})
+        agl = int(now.second / 59 * 6000)
+        ts  = now.isoformat()
         if simple:
             return str(agl) + "\n", 200, {"Content-Type": "text/plain"}
         return jsonify({"registration": registration, "hex": icao_hex,
