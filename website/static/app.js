@@ -15,6 +15,7 @@ let useAGL        = true;
 let chart         = null;
 let lastRoc       = 0;
 let currentView  = 'altitude';
+let _historyOpen = false;
 
 const reg    = () => (aircraft.find(a => a.hex === hex) || {}).registration || hex;
 const yLabel = () => useAGL ? 'ft  (AGL - calculated)' : 'ft  (baro)';
@@ -41,7 +42,11 @@ function showView(name) {
   document.getElementById('nav').style.display = 'none';
   updateUrl();
   if (name === 'altitude' && chart) chart.resize();
-  if (name === 'events') refreshEvents();
+  if (name === 'events') {
+    _historyOpen = false;
+    document.getElementById('history-panel').style.display = 'none';
+    refreshEvents();
+  }
 }
 
 document.getElementById('hamburger').addEventListener('click', e => {
@@ -143,6 +148,8 @@ function _openPicker(anchorRect, onSelect) {
       eventsInitialized = false;
       lastTakeoffTs = null;
       lastAgl       = null;
+      _historyOpen  = false;
+      document.getElementById('history-panel').style.display = 'none';
       picker.style.display = 'none';
       onSelect();
     });
@@ -775,6 +782,47 @@ async function refreshEvents() {
   eventsInitialized = true;
 
   renderEvents(resp.events, resp.agl_offset);
+}
+
+// ── 7-day history ─────────────────────────────────────────────────────────────
+async function toggleHistory() {
+  const panel = document.getElementById('history-panel');
+  const btn   = document.getElementById('history-btn');
+  if (_historyOpen) {
+    panel.style.display = 'none';
+    _historyOpen = false;
+    return;
+  }
+  panel.innerHTML = '<div style="color:#555">Loading…</div>';
+  panel.style.display = 'block';
+  _historyOpen = true;
+  const resp = await fetch(`/api/history/${hex}`).then(r => r.json());
+  const days = resp.days;
+
+  const th = s => `<th style="padding:4px 10px;text-align:right;color:#555;font-weight:normal">${s}</th>`;
+  const td = (n, cls='') => `<td style="padding:4px 10px;text-align:right${cls ? ';color:'+cls : ''}">${n || '—'}</td>`;
+  const fmt = d => new Date(d + 'T00:00:00').toLocaleDateString('nl-NL', { weekday: 'short', month: 'short', day: 'numeric' });
+
+  let html = `<table style="font-size:13px;border-collapse:collapse">
+    <thead><tr>
+      ${th('date')}${th('T/O')}${th('T&G')}${th('LDG')}${th('↑3000')}${th('↓3000')}${th('↑5500')}${th('↓5500')}
+    </tr></thead><tbody>`;
+  for (const d of days) {
+    const hasData = d.takeoffs || d.landings || d.touch_and_gos || d.climbing_3000 || d.descending_3000 || d.climbing_5500 || d.descending_5500;
+    const rowColor = hasData ? '' : 'color:#444';
+    html += `<tr style="${rowColor}">
+      <td style="padding:4px 10px;color:#888">${fmt(d.date)}</td>
+      ${td(d.takeoffs      || '')}
+      ${td(d.touch_and_gos || '')}
+      ${td(d.landings      || '')}
+      ${td(d.climbing_3000   || '')}
+      ${td(d.descending_3000 || '')}
+      ${td(d.climbing_5500   || '')}
+      ${td(d.descending_5500 || '')}
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  panel.innerHTML = html;
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────

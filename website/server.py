@@ -564,6 +564,41 @@ def events(icao_hex: str):
     })
 
 
+@app.route("/api/history/<icao_hex>")
+def history(icao_hex: str):
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    days = []
+    for i in range(7):
+        day_start = today - timedelta(days=i)
+        day_end   = day_start + timedelta(days=1)
+        with _db() as conn:
+            rows = conn.execute(
+                """
+                SELECT ts, alt_baro FROM readings
+                 WHERE icao_hex = ? AND ts >= ? AND ts < ? AND alt_baro IS NOT NULL
+                 ORDER BY ts
+                """,
+                (icao_hex, day_start.isoformat(), day_end.isoformat()),
+            ).fetchall()
+        rows = _filter_altitude_outliers(rows)
+        agl_offset = _compute_agl_offset(rows)
+        evs = _detect_events(rows, agl_offset)
+        counts: dict[str, int] = {}
+        for ev in evs:
+            counts[ev["type"]] = counts.get(ev["type"], 0) + 1
+        days.append({
+            "date":            day_start.date().isoformat(),
+            "takeoffs":        counts.get("takeoff", 0),
+            "landings":        counts.get("landing", 0),
+            "touch_and_gos":   counts.get("touch_and_go", 0),
+            "climbing_3000":   counts.get("climbing_3000", 0),
+            "descending_3000": counts.get("descending_3000", 0),
+            "climbing_5500":   counts.get("climbing_5500", 0),
+            "descending_5500": counts.get("descending_5500", 0),
+        })
+    return jsonify({"days": days})
+
+
 @app.route("/api/current")
 def current_altitude():
     """Return the current AGL altitude for one aircraft.
