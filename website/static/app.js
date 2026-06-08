@@ -424,10 +424,15 @@ async function refresh() {
     ? fetch(`/api/current?ac=${encodeURIComponent(reg())}${useFake ? '&fake' : ''}`).then(r => r.json())
     : fetch(`/api/altitude/${hex}?minutes=${mins}${useFake ? '&fake' : ''}`).then(r => r.json());
 
+  // Skip events fetch on events view — refreshEvents() runs in parallel and owns lastTakeoffTs there
+  const evFetch = currentView !== 'events'
+    ? fetch(`/api/events/${hex}`).then(r => r.json())
+    : Promise.resolve(null);
+
   const [altResp, newStatus, evResp] = await Promise.all([
     altFetch,
     fetch('/api/status').then(r => r.json()),
-    fetch(`/api/events/${hex}`).then(r => r.json()),
+    evFetch,
   ]);
 
   statusMap = newStatus.aircraft;
@@ -435,15 +440,17 @@ async function refresh() {
   document.getElementById('user-count').textContent =
     newStatus.active_users === 1 ? '1 user' : `${newStatus.active_users} users`;
 
-  // Replay events to find whether the aircraft is currently airborne
-  let _takeoffTs = null;
-  for (const ev of evResp.events) {
-    const t = new Date(ev.ts);
-    if (ev.type === 'takeoff') { _takeoffTs = t; }
-    if (ev.type === 'landing') { _takeoffTs = null; }
-    // touch_and_go: still airborne, keep _takeoffTs as the original takeoff
+  if (evResp) {
+    // Replay events to find whether the aircraft is currently airborne
+    let _takeoffTs = null;
+    for (const ev of evResp.events) {
+      const t = new Date(ev.ts);
+      if (ev.type === 'takeoff') { _takeoffTs = t; }
+      if (ev.type === 'landing') { _takeoffTs = null; }
+      // touch_and_go: still airborne, keep _takeoffTs as the original takeoff
+    }
+    lastTakeoffTs = _takeoffTs;
   }
-  lastTakeoffTs = _takeoffTs;
 
   if (currentView === 'altimeter') {
     lastAgl = altResp.agl;
@@ -783,19 +790,19 @@ function speakEvent(ev) {
 async function refreshEvents() {
   const resp = await fetch(`/api/events/${hex}`).then(r => r.json());
 
-  // Announce any events not yet spoken, computing durations in forward order
-  let lastTakeoffTs = null;
-  let lastTakeoffDur = '';
+  // Update global lastTakeoffTs and announce any new events
+  let _takeoffTs = null;
   for (const ev of resp.events) {
     const t = new Date(ev.ts);
-    if (ev.type === 'takeoff')                  { lastTakeoffTs = t; lastTakeoffDur = ''; }
-    if (ev.type === 'landing' && lastTakeoffTs) { lastTakeoffDur = durStr(t - lastTakeoffTs); lastTakeoffTs = null; }
-    // touch_and_go: keep lastTakeoffTs (still airborne)
+    if (ev.type === 'takeoff')               { _takeoffTs = t; }
+    if (ev.type === 'landing' && _takeoffTs) { _takeoffTs = null; }
+    // touch_and_go: keep _takeoffTs (still airborne)
     if (!announcedEvents.has(ev.ts)) {
       announcedEvents.add(ev.ts);
       if (eventsInitialized) speakEvent(ev);
     }
   }
+  lastTakeoffTs = _takeoffTs;
   eventsInitialized = true;
 
   renderEvents(resp.events, resp.agl_offset);
