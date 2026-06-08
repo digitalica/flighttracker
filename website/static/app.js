@@ -420,27 +420,44 @@ function buildChart() {
 }
 
 async function refresh() {
-  const [resp, newStatus, evResp] = await Promise.all([
-    fetch(`/api/altitude/${hex}?minutes=${mins}`).then(r => r.json()),
+  const altFetch = currentView === 'altimeter'
+    ? fetch(`/api/current?ac=${encodeURIComponent(reg())}${useFake ? '&fake' : ''}`).then(r => r.json())
+    : fetch(`/api/altitude/${hex}?minutes=${mins}${useFake ? '&fake' : ''}`).then(r => r.json());
+
+  const [altResp, newStatus, evResp] = await Promise.all([
+    altFetch,
     fetch('/api/status').then(r => r.json()),
     fetch(`/api/events/${hex}`).then(r => r.json()),
   ]);
 
-  statusMap    = newStatus.aircraft;
-  lastPost     = newStatus.last_post ? new Date(newStatus.last_post) : null;
+  statusMap = newStatus.aircraft;
+  lastPost  = newStatus.last_post ? new Date(newStatus.last_post) : null;
   document.getElementById('user-count').textContent =
     newStatus.active_users === 1 ? '1 user' : `${newStatus.active_users} users`;
-  sessionStart = resp.session_start ? new Date(resp.session_start) : null;
-  // Replay events in order to find whether the aircraft is currently airborne
+
+  // Replay events to find whether the aircraft is currently airborne
   let _takeoffTs = null;
   for (const ev of evResp.events) {
     const t = new Date(ev.ts);
-    if (ev.type === 'takeoff')     { _takeoffTs = t; }
-    if (ev.type === 'landing')     { _takeoffTs = null; }
+    if (ev.type === 'takeoff') { _takeoffTs = t; }
+    if (ev.type === 'landing') { _takeoffTs = null; }
     // touch_and_go: still airborne, keep _takeoffTs as the original takeoff
   }
   lastTakeoffTs = _takeoffTs;
-  const data   = resp.points;
+
+  if (currentView === 'altimeter') {
+    lastAgl = altResp.agl;
+    const arrow = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
+    document.getElementById('altimeter-title').textContent    = regSuffix() + arrow;
+    document.getElementById('altimeter-subtitle').textContent = lastSeenLabel(hex);
+    document.title = `${regSuffix()} FlightTracker`;
+    updateDataStatus();
+    animateAltimeter(lastAgl);
+    return;
+  }
+
+  sessionStart = altResp.session_start ? new Date(altResp.session_start) : null;
+  const data   = altResp.points;
 
   const key = useAGL ? 'agl' : 'baro';
   const now = new Date();
@@ -456,9 +473,9 @@ async function refresh() {
   const maxAbs = Math.max(...data.map(d => Math.abs(d.roc)), 100);
   chart.options.scales.y.min = -maxAbs;
   chart.options.scales.y.max =  maxAbs;
-  lastRoc       = data.length ? data[data.length - 1].roc  : 0;
-  lastAgl       = data.length ? data[data.length - 1].agl  : null;
-  const arrow   = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
+  lastRoc = data.length ? data[data.length - 1].roc : 0;
+  lastAgl = data.length ? data[data.length - 1].agl : null;
+  const arrow = acStatus(hex) === 'active' ? climbArrow(lastRoc) : '';
   chart.options.plugins.title.text    = regSuffix() + arrow;
   chart.options.plugins.subtitle.text = lastSeenLabel(hex);
   document.title = `${regSuffix()} FlightTracker`;
@@ -469,7 +486,6 @@ async function refresh() {
   document.getElementById('events-subtitle').textContent    = lastSeenLabel(hex);
   document.getElementById('altimeter-title').textContent    = regSuffix() + arrow;
   document.getElementById('altimeter-subtitle').textContent = lastSeenLabel(hex);
-  if (currentView === 'altimeter') animateAltimeter(lastAgl);
 }
 
 // ── Events view ───────────────────────────────────────────────────────────────
