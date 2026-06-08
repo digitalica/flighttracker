@@ -1,4 +1,5 @@
 // ── State ─────────────────────────────────────────────────────────────────────
+const REFRESH_INTERVAL_MS = 2000;
 const RANGES  = [30, 60, 120, 240, 480, 960];
 const RLABEL  = { 30: '30 min', 60: '1 h', 120: '2 h', 240: '4 h', 480: '8 h', 960: '16 h' };
 const DEF_HEX = '484763'; // PH-TGC
@@ -832,8 +833,8 @@ async function init() {
   buildChart();
   showView(currentView);
   await refresh();
-  setInterval(refresh, 5000);
-  setInterval(() => { if (currentView === 'events') refreshEvents(); }, 5000);
+  setInterval(refresh, REFRESH_INTERVAL_MS);
+  setInterval(() => { if (currentView === 'events') refreshEvents(); }, REFRESH_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 
