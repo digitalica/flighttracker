@@ -806,7 +806,7 @@ async function toggleHistory() {
 
   let html = `<table style="font-size:13px;border-collapse:collapse">
     <thead><tr>
-      ${th('date')}${th('T/O')}${th('T&G')}${th('LDG')}${th('↑3000')}${th('↓3000')}${th('↑5500')}${th('↓5500')}
+      ${th('date')}${th('T/O')}${th('LDG')}${th('T&G')}${th('↑3000')}${th('↑5500')}${th('↓5500')}${th('↓3000')}
     </tr></thead><tbody>`;
   for (const d of days) {
     const hasData = d.takeoffs || d.landings || d.touch_and_gos || d.climbing_3000 || d.descending_3000 || d.climbing_5500 || d.descending_5500;
@@ -814,12 +814,12 @@ async function toggleHistory() {
     html += `<tr style="${rowColor}">
       <td style="padding:4px 10px;color:#888">${fmt(d.date)}</td>
       ${td(d.takeoffs      || '')}
-      ${td(d.touch_and_gos || '')}
       ${td(d.landings      || '')}
+      ${td(d.touch_and_gos || '')}
       ${td(d.climbing_3000   || '')}
-      ${td(d.descending_3000 || '')}
       ${td(d.climbing_5500   || '')}
       ${td(d.descending_5500 || '')}
+      ${td(d.descending_3000 || '')}
     </tr>`;
   }
   html += '</tbody></table>';
