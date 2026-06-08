@@ -13,6 +13,7 @@ let lastAgl       = null;
 let hex           = DEF_HEX;
 let mins          = 30;
 let useAGL        = true;
+let useFake       = false;
 let chart         = null;
 let lastRoc       = 0;
 let currentView  = 'altitude';
