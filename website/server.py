@@ -82,6 +82,7 @@ TARGET_AIRCRAFT = {
     "484ff2": "PH-PLP",
     "a8b0a3": "N65909",
     "3ecadc": "D-KRUA",
+    "484c49": "PH1311",
 }
 
 SBS_IDX = {

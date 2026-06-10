@@ -57,6 +57,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 484FF2   | PH-PLP       | Van's RV-7                  |                              |
 | A8B0A3   | N65909       | Cessna 172 Skyhawk (1983)   | US registration              |
 | 3ECADC   | D-KRUA       | Schleicher ASG-29           | glider, German               |
+| 484C49   | PH1311       | Schleicher ASK-21           | glider                       |
 
 ## Infrastructure
 
