@@ -58,6 +58,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | A8B0A3   | N65909       | Cessna 172 Skyhawk (1983)   | US registration              |
 | 3ECADC   | D-KRUA       | Schleicher ASG-29           | glider, German               |
 | 484C49   | PH1311       | Schleicher ASK-21           | glider                       |
+| A0796C   | N13FY        | North American T-6 Texan    | US registration, 1942        |
 
 ## Infrastructure
 
