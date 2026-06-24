@@ -13,6 +13,7 @@ than MAX_BACKLOG_DAYS are pruned automatically.
 import os
 import socket
 import sqlite3
+import subprocess
 import time
 import logging
 import sys
@@ -32,6 +33,23 @@ BATCH_MAX = 100          # max messages per backlog catch-up batch
 RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
 HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
 CATCHUP_FACTOR = 10      # backlog batches are this many times larger than normal
+
+TGC_HEX               = "484763"
+ANNOUNCE_POLL_URL     = SERVER_URL.replace("/sbs", "/api/feeder/poll")
+ANNOUNCE_REPORT_URL   = SERVER_URL.replace("/sbs", "/api/feeder/announced")
+ANNOUNCE_INTERVAL_ACTIVE = 1   # seconds when PH-TGC is active
+ANNOUNCE_INTERVAL_IDLE   = 5   # seconds otherwise
+TGC_ACTIVE_SECS          = 120 # consider active if seen within this window
+
+SPEECH_TEXTS = {
+    "takeoff":         "P H T G C, takeoff",
+    "landing":         "P H T G C, landing",
+    "touch_and_go":    "P H T G C, touch and go",
+    "climbing_3000":   "P H T G C, approaching 3500 feet",
+    "climbing_5500":   "P H T G C, approaching 6000 feet",
+    "descending_3000": "P H T G C, descending through 3000 feet",
+    "descending_5500": "P H T G C, descending through 5500 feet",
+}
 
 METRICS_PORT = 9877
 
@@ -96,6 +114,7 @@ log = logging.getLogger(__name__)
 
 _buffer: deque[str] = deque()
 _lock = threading.Lock()
+_tgc_last_seen: float | None = None  # epoch time of last PH-TGC SBS message
 
 _sbs_connected   = Gauge('feeder_sbs_connected',        '1 if currently connected to the SBS stream')
 _buffer_size     = Gauge('feeder_buffer_size',           'In-memory message buffer size')
@@ -190,6 +209,9 @@ def read_sbs():
                             if _is_target(line):
                                 _buffer.append(line)
                                 _target_messages.inc()
+                                if len(line.split(",")) >= 5 and line.split(",")[4].strip().lower() == TGC_HEX:
+                                    global _tgc_last_seen
+                                    _tgc_last_seen = time.time()
         except (OSError, socket.timeout) as exc:
             log.warning(f"SBS connection error: {exc}")
         _sbs_connected.set(0)
@@ -274,6 +296,65 @@ def send_loop():
 
 
 # ---------------------------------------------------------------------------
+# Announcements
+# ---------------------------------------------------------------------------
+
+def _speak(text: str) -> None:
+    try:
+        subprocess.run(["espeak-ng", "-s", "130", text], timeout=10, check=False)
+    except FileNotFoundError:
+        try:
+            subprocess.run(["espeak", "-s", "130", text], timeout=10, check=False)
+        except Exception as exc:
+            log.warning(f"espeak not available: {exc}")
+    except Exception as exc:
+        log.warning(f"espeak failed: {exc}")
+
+
+def announce_loop():
+    """Poll server for PH-TGC events and speak new ones via espeak."""
+    announced: set[str] = set()
+
+    while True:
+        active = _tgc_last_seen is not None and (time.time() - _tgc_last_seen) < TGC_ACTIVE_SECS
+        interval = ANNOUNCE_INTERVAL_ACTIVE if active else ANNOUNCE_INTERVAL_IDLE
+
+        try:
+            resp = requests.get(ANNOUNCE_POLL_URL, timeout=5)
+            resp.raise_for_status()
+            data = resp.json()
+
+            to_report = []
+
+            if data.get("command") == "test_sound":
+                label = "FlightTracker sound test"
+                _speak(label)
+                to_report.append({"type": "test_sound", "label": label})
+
+            for ev in data.get("events", []):
+                if ev["type"] in ("active", "inactive"):
+                    continue
+                if ev["ts"] in announced:
+                    continue
+                announced.add(ev["ts"])
+                label = SPEECH_TEXTS.get(ev["type"])
+                if label:
+                    _speak(label)
+                    to_report.append({"type": ev["type"], "ts": ev["ts"], "label": label})
+
+            if to_report:
+                try:
+                    requests.post(ANNOUNCE_REPORT_URL, json={"events": to_report}, timeout=5)
+                except Exception as exc:
+                    log.warning(f"Failed to report announcements: {exc}")
+
+        except Exception as exc:
+            log.warning(f"Announce poll failed: {exc}")
+
+        time.sleep(interval)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -287,8 +368,10 @@ def main():
     start_http_server(METRICS_PORT)
     log.info(f"Metrics      : http://0.0.0.0:{METRICS_PORT}")
 
-    reader = threading.Thread(target=read_sbs, daemon=True, name="sbs-reader")
+    reader   = threading.Thread(target=read_sbs,      daemon=True, name="sbs-reader")
+    announcer = threading.Thread(target=announce_loop, daemon=True, name="announcer")
     reader.start()
+    announcer.start()
 
     send_loop()  # runs in main thread
 

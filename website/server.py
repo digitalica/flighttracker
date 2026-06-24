@@ -106,6 +106,13 @@ _last_post: datetime | None = None               # last POST /sbs received (UTC)
 _visitors:  dict[str, datetime] = {}             # ip -> last seen (UTC)
 _lock = threading.Lock()
 
+# Feeder announcement state
+_feeder_command:    str | None      = None        # pending command for feeder
+_feeder_last_poll:  datetime | None = None        # last feeder poll time
+_announcement_log:  list[dict]      = []          # recent announcements
+_feeder_lock = threading.Lock()
+MAX_ANNOUNCEMENT_LOG = 200
+
 VISITOR_TIMEOUT = 60  # seconds before a visitor is considered inactive
 
 # ---------------------------------------------------------------------------
@@ -599,6 +606,59 @@ def history(icao_hex: str):
             "descending_5500": counts.get("descending_5500", 0),
         })
     return jsonify({"days": days})
+
+
+TGC_HEX = "484763"
+
+@app.route("/api/feeder/poll")
+def feeder_poll():
+    global _feeder_command, _feeder_last_poll
+    since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    with _db() as conn:
+        rows = conn.execute(
+            "SELECT ts, alt_baro FROM readings WHERE icao_hex = ? AND ts >= ? AND alt_baro IS NOT NULL ORDER BY ts",
+            (TGC_HEX, since),
+        ).fetchall()
+    rows = _filter_altitude_outliers(rows)
+    agl_offset = _compute_agl_offset(rows)
+    events = _detect_events(rows, agl_offset)
+    with _feeder_lock:
+        cmd = _feeder_command
+        _feeder_command = None
+        _feeder_last_poll = datetime.now(timezone.utc)
+    return jsonify({"command": cmd, "events": events})
+
+
+@app.route("/api/feeder/announced", methods=["POST"])
+def feeder_announced():
+    global _announcement_log
+    entries = request.json.get("events", [])
+    now = datetime.now(timezone.utc).isoformat()
+    with _feeder_lock:
+        for ev in entries:
+            _announcement_log.append({
+                "announced_at": now,
+                "type":  ev["type"],
+                "label": ev["label"],
+            })
+        _announcement_log = _announcement_log[-MAX_ANNOUNCEMENT_LOG:]
+    return jsonify({"ok": True})
+
+
+@app.route("/api/feeder/test", methods=["POST"])
+def feeder_test():
+    global _feeder_command
+    with _feeder_lock:
+        _feeder_command = "test_sound"
+    return jsonify({"ok": True})
+
+
+@app.route("/api/announcements")
+def announcements_log():
+    with _feeder_lock:
+        log_copy   = list(reversed(_announcement_log))
+        last_poll  = _feeder_last_poll.isoformat() if _feeder_last_poll else None
+    return jsonify({"announcements": log_copy, "feeder_last_poll": last_poll})
 
 
 @app.route("/api/current")

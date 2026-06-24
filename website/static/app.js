@@ -35,10 +35,12 @@ function showView(name) {
   document.getElementById('view-altitude').style.display  = name === 'altitude'  ? 'block' : 'none';
   document.getElementById('view-events').style.display    = name === 'events'    ? 'block' : 'none';
   document.getElementById('view-altimeter').style.display = name === 'altimeter' ? 'block' : 'none';
+  document.getElementById('view-announce').style.display  = name === 'announce'  ? 'block' : 'none';
   document.getElementById('view-about').style.display     = name === 'about'     ? 'block' : 'none';
   document.getElementById('nav-altitude').className  = name === 'altitude'  ? 'active' : '';
   document.getElementById('nav-events').className    = name === 'events'    ? 'active' : '';
   document.getElementById('nav-altimeter').className = name === 'altimeter' ? 'active' : '';
+  document.getElementById('nav-announce').className  = name === 'announce'  ? 'active' : '';
   document.getElementById('nav-about').className     = name === 'about'     ? 'active' : '';
   if (name === 'altimeter') animateAltimeter(lastAgl);
   document.getElementById('nav').style.display = 'none';
@@ -49,6 +51,7 @@ function showView(name) {
     document.getElementById('history-panel').style.display = 'none';
     refreshEvents();
   }
+  if (name === 'announce') refreshAnnouncements();
 }
 
 document.getElementById('hamburger').addEventListener('click', e => {
@@ -235,7 +238,7 @@ function readUrlState() {
   if (RANGES.includes(minsParam)) mins = minsParam;
   if (p.has('agl')) useAGL = p.get('agl') === '1';
   const view = p.get('view');
-  if (['events', 'altimeter', 'about'].includes(view)) currentView = view;
+  if (['events', 'altimeter', 'announce', 'about'].includes(view)) currentView = view;
   if (p.get('alti') === 'skydive') altimeterMode = 'skydive';
 }
 
@@ -850,6 +853,40 @@ async function toggleHistory() {
   panel.innerHTML = html;
 }
 
+// ── Announce view ─────────────────────────────────────────────────────────────
+async function testFeederSound() {
+  await fetch('/api/feeder/test', { method: 'POST' });
+}
+
+async function refreshAnnouncements() {
+  const resp = await fetch('/api/announcements').then(r => r.json());
+
+  const statusEl = document.getElementById('feeder-status');
+  if (resp.feeder_last_poll) {
+    const secs = Math.round((Date.now() - new Date(resp.feeder_last_poll)) / 1000);
+    statusEl.textContent = `feeder last polled ${secs}s ago`;
+  } else {
+    statusEl.textContent = 'feeder has not polled yet';
+  }
+
+  const logEl = document.getElementById('announce-log');
+  if (!resp.announcements.length) {
+    logEl.innerHTML = '<div style="color:#555">No announcements yet.</div>';
+    return;
+  }
+  let html = '<table style="font-size:13px;border-collapse:collapse">';
+  for (const a of resp.announcements) {
+    const t = new Date(a.announced_at);
+    const time = t.toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    html += `<tr>
+      <td style="padding:4px 14px 4px 0;color:#555">${time}</td>
+      <td style="padding:4px 0">${a.label}</td>
+    </tr>`;
+  }
+  html += '</table>';
+  logEl.innerHTML = html;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function init() {
   aircraft = await fetch('/api/aircraft').then(r => r.json());
@@ -858,7 +895,8 @@ async function init() {
   showView(currentView);
   await refresh();
   setInterval(refresh, REFRESH_INTERVAL_MS);
-  setInterval(() => { if (currentView === 'events') refreshEvents(); }, REFRESH_INTERVAL_MS);
+  setInterval(() => { if (currentView === 'events')   refreshEvents(); }, REFRESH_INTERVAL_MS);
+  setInterval(() => { if (currentView === 'announce') refreshAnnouncements(); }, REFRESH_INTERVAL_MS);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 }
 
