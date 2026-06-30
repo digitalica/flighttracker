@@ -41,15 +41,18 @@ ANNOUNCE_INTERVAL_ACTIVE = 1   # seconds when PH-TGC is active
 ANNOUNCE_INTERVAL_IDLE   = 5   # seconds otherwise
 TGC_ACTIVE_SECS          = 120 # consider active if seen within this window
 
-SPEECH_TEXTS = {
-    "takeoff":         "P H T G C, takeoff",
-    "landing":         "P H T G C, landing",
-    "touch_and_go":    "P H T G C, touch and go",
-    "climbing_3000":   "P H T G C, approaching 3500 feet",
-    "climbing_5500":   "P H T G C, approaching 6000 feet",
-    "descending_3000": "P H T G C, descending through 3000 feet",
-    "descending_5500": "P H T G C, descending through 5500 feet",
-}
+def _speech_texts(reg: str) -> dict[str, str]:
+    """Build event speech strings for a given registration (e.g. 'PH-TGC')."""
+    id_ = reg.replace("-", " ")  # espeak reads each letter: "PH TGC" -> "P H T G C"
+    return {
+        "takeoff":         f"{id_}, takeoff",
+        "landing":         f"{id_}, landing",
+        "touch_and_go":    f"{id_}, touch and go",
+        "climbing_3000":   f"{id_}, approaching 3500 feet",
+        "climbing_5500":   f"{id_}, approaching 6000 feet",
+        "descending_3000": f"{id_}, descending through 3000 feet",
+        "descending_5500": f"{id_}, descending through 5500 feet",
+    }
 
 METRICS_PORT = 9877
 
@@ -114,7 +117,7 @@ log = logging.getLogger(__name__)
 
 _buffer: deque[str] = deque()
 _lock = threading.Lock()
-_tgc_last_seen: float | None = None  # epoch time of last PH-TGC SBS message
+_aircraft_last_seen: dict[str, float] = {}  # hex -> epoch time of last SBS message
 
 _sbs_connected   = Gauge('feeder_sbs_connected',        '1 if currently connected to the SBS stream')
 _buffer_size     = Gauge('feeder_buffer_size',           'In-memory message buffer size')
@@ -209,9 +212,9 @@ def read_sbs():
                             if _is_target(line):
                                 _buffer.append(line)
                                 _target_messages.inc()
-                                if len(line.split(",")) >= 5 and line.split(",")[4].strip().lower() == TGC_HEX:
-                                    global _tgc_last_seen
-                                    _tgc_last_seen = time.time()
+                                parts_hex = line.split(",")
+                                if len(parts_hex) >= 5:
+                                    _aircraft_last_seen[parts_hex[4].strip().lower()] = time.time()
         except (OSError, socket.timeout) as exc:
             log.warning(f"SBS connection error: {exc}")
         _sbs_connected.set(0)
@@ -312,17 +315,28 @@ def _speak(text: str) -> None:
 
 
 def announce_loop():
-    """Poll server for PH-TGC events and speak new ones via espeak."""
-    announced: set[str] = set()
+    """Poll server for events on the followed aircraft and speak new ones via espeak."""
+    announced:    set[str]       = set()
+    follow_hex:   str            = TGC_HEX
+    speech_texts: dict[str, str] = _speech_texts("PH-TGC")
 
     while True:
-        active = _tgc_last_seen is not None and (time.time() - _tgc_last_seen) < TGC_ACTIVE_SECS
+        last_seen = _aircraft_last_seen.get(follow_hex, 0)
+        active   = last_seen and (time.time() - last_seen) < TGC_ACTIVE_SECS
         interval = ANNOUNCE_INTERVAL_ACTIVE if active else ANNOUNCE_INTERVAL_IDLE
 
         try:
             resp = requests.get(ANNOUNCE_POLL_URL, timeout=5)
             resp.raise_for_status()
             data = resp.json()
+
+            # Switch followed aircraft if server changed it
+            new_hex = data.get("follow_hex", TGC_HEX)
+            if new_hex != follow_hex:
+                log.info(f"Switching follow target: {follow_hex} -> {new_hex}")
+                follow_hex   = new_hex
+                speech_texts = _speech_texts(data.get("follow_reg", new_hex))
+                announced.clear()
 
             to_report = []
 
@@ -337,7 +351,7 @@ def announce_loop():
                 if ev["ts"] in announced:
                     continue
                 announced.add(ev["ts"])
-                label = SPEECH_TEXTS.get(ev["type"])
+                label = speech_texts.get(ev["type"])
                 if label:
                     _speak(label)
                     to_report.append({"type": ev["type"], "ts": ev["ts"], "label": label})

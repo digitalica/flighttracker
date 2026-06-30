@@ -854,12 +854,35 @@ async function toggleHistory() {
 }
 
 // ── Announce view ─────────────────────────────────────────────────────────────
+function _buildFollowSelect(currentHex) {
+  const sel = document.getElementById('follow-select');
+  if (!sel) return;
+  const sorted = [...aircraft].sort((a, b) => {
+    if (a.hex === DEF_HEX) return -1;
+    if (b.hex === DEF_HEX) return  1;
+    return a.registration.localeCompare(b.registration);
+  });
+  sel.innerHTML = sorted.map(a =>
+    `<option value="${a.hex}"${a.hex === currentHex ? ' selected' : ''}>${a.registration}</option>`
+  ).join('');
+}
+
+async function setFollowAircraft(hex) {
+  await fetch('/api/feeder/follow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hex }),
+  });
+}
+
 async function testFeederSound() {
   await fetch('/api/feeder/test', { method: 'POST' });
 }
 
 async function refreshAnnouncements() {
   const resp = await fetch('/api/announcements').then(r => r.json());
+
+  _buildFollowSelect(resp.follow_hex);
 
   const statusEl = document.getElementById('feeder-status');
   if (resp.feeder_last_poll) {

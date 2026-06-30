@@ -109,6 +109,7 @@ _lock = threading.Lock()
 # Feeder announcement state
 _feeder_command:    str | None      = None        # pending command for feeder
 _feeder_last_poll:  datetime | None = None        # last feeder poll time
+_feeder_follow_hex: str             = "484763"    # hex of aircraft feeder announces (default PH-TGC)
 _announcement_log:  list[dict]      = []          # recent announcements
 _feeder_lock = threading.Lock()
 MAX_ANNOUNCEMENT_LOG = 200
@@ -613,11 +614,13 @@ TGC_HEX = "484763"
 @app.route("/api/feeder/poll")
 def feeder_poll():
     global _feeder_command, _feeder_last_poll
+    with _feeder_lock:
+        follow_hex = _feeder_follow_hex
     since = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     with _db() as conn:
         rows = conn.execute(
             "SELECT ts, alt_baro FROM readings WHERE icao_hex = ? AND ts >= ? AND alt_baro IS NOT NULL ORDER BY ts",
-            (TGC_HEX, since),
+            (follow_hex, since),
         ).fetchall()
     rows = _filter_altitude_outliers(rows)
     agl_offset = _compute_agl_offset(rows)
@@ -626,7 +629,19 @@ def feeder_poll():
         cmd = _feeder_command
         _feeder_command = None
         _feeder_last_poll = datetime.now(timezone.utc)
-    return jsonify({"command": cmd, "events": events})
+    follow_reg = TARGET_AIRCRAFT.get(follow_hex, follow_hex)
+    return jsonify({"command": cmd, "events": events, "follow_hex": follow_hex, "follow_reg": follow_reg})
+
+
+@app.route("/api/feeder/follow", methods=["POST"])
+def feeder_follow():
+    global _feeder_follow_hex
+    hex_code = request.json.get("hex", "").lower()
+    if hex_code not in TARGET_AIRCRAFT:
+        return jsonify({"error": "unknown aircraft"}), 400
+    with _feeder_lock:
+        _feeder_follow_hex = hex_code
+    return jsonify({"ok": True})
 
 
 @app.route("/api/feeder/announced", methods=["POST"])
@@ -658,7 +673,10 @@ def announcements_log():
     with _feeder_lock:
         log_copy   = list(reversed(_announcement_log))
         last_poll  = _feeder_last_poll.isoformat() if _feeder_last_poll else None
-    return jsonify({"announcements": log_copy, "feeder_last_poll": last_poll})
+        follow_hex = _feeder_follow_hex
+    follow_reg = TARGET_AIRCRAFT.get(follow_hex, follow_hex)
+    return jsonify({"announcements": log_copy, "feeder_last_poll": last_poll,
+                    "follow_hex": follow_hex, "follow_reg": follow_reg})
 
 
 @app.route("/api/current")
