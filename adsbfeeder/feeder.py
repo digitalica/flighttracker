@@ -391,4 +391,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--test-sound" in sys.argv:
+        print("Playing test sound via espeak...")
+        _speak("FlightTracker sound test. P H T G C, takeoff.")
+        print("Done.")
+    else:
+        main()

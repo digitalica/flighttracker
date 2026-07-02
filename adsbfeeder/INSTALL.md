@@ -25,7 +25,17 @@ python3 -m venv /opt/flighttracker/venv
 /opt/flighttracker/venv/bin/pip install -r /opt/flighttracker/requirements.txt
 ```
 
-## 4. Test manually
+## 4. Test sound output
+
+Verify that `espeak-ng` is working and the speaker volume is acceptable:
+
+```bash
+/opt/flighttracker/venv/bin/python /opt/flighttracker/feeder.py --test-sound
+```
+
+You should hear two spoken phrases: a generic sound test and a sample takeoff announcement. Adjust system volume if needed before continuing.
+
+## 5. Test manually
 
 ```bash
 /opt/flighttracker/venv/bin/python /opt/flighttracker/feeder.py
@@ -42,7 +52,7 @@ You should see log lines like:
 
 If the SBS port is not 30003, check your feeder config and update `SBS_PORT` in `feeder.py`.
 
-## 5. Install as a systemd service
+## 6. Install as a systemd service
 
 ```bash
 scp flighttracker-feeder.service root@<feeder-ip>:/etc/systemd/system/
