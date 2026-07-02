@@ -34,6 +34,8 @@ RECONNECT_DELAY = 10     # seconds before reconnect after disconnect
 HEARTBEAT_INTERVAL = 2   # seconds between heartbeat POSTs when buffer is empty
 CATCHUP_FACTOR = 10      # backlog batches are this many times larger than normal
 
+ALSA_DEVICE           = "plughw:Device"  # USB PnP Sound Device (aplay -l to verify)
+
 TGC_HEX               = "484763"
 ANNOUNCE_POLL_URL     = SERVER_URL.replace("/sbs", "/api/feeder/poll")
 ANNOUNCE_REPORT_URL   = SERVER_URL.replace("/sbs", "/api/feeder/announced")
@@ -303,15 +305,16 @@ def send_loop():
 # ---------------------------------------------------------------------------
 
 def _speak(text: str) -> None:
+    """Synthesise speech via espeak-ng piped to aplay (avoids audio device init errors)."""
     try:
-        subprocess.run(["espeak-ng", "-s", "130", text], timeout=10, check=False)
-    except FileNotFoundError:
-        try:
-            subprocess.run(["espeak", "-s", "130", text], timeout=10, check=False)
-        except Exception as exc:
-            log.warning(f"espeak not available: {exc}")
+        espeak = subprocess.Popen(
+            ["espeak-ng", "-s", "130", "--stdout", text],
+            stdout=subprocess.PIPE,
+        )
+        subprocess.run(["aplay", "-q", "-D", ALSA_DEVICE], stdin=espeak.stdout, timeout=10, check=False)
+        espeak.wait()
     except Exception as exc:
-        log.warning(f"espeak failed: {exc}")
+        log.warning(f"speak failed: {exc}")
 
 
 def announce_loop():

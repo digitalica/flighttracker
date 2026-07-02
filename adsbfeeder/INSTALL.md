@@ -13,7 +13,7 @@ scp feeder.py requirements.txt root@<feeder-ip>:/opt/flighttracker/
 
 ```bash
 ssh root@<feeder-ip>
-apt install -y espeak-ng
+apt install -y espeak-ng alsa-utils
 ```
 
 ## 3. Create a Python virtual environment on the feeder
