@@ -70,6 +70,20 @@ systemctl status flighttracker-feeder
 nc localhost 30003
 ```
 
+## Local altitude API
+
+The feeder also serves a local `/api/current` endpoint (same shape as the website's),
+sourced from the live SBS stream instead of the database — for a display device on
+the same LAN that wants current altitude without going through the website:
+
+```bash
+curl "http://<feeder-ip>:9878/api/current?ac=PH-TGC&simple"
+```
+
+Supports the same `ac=` (registration or hex), `simple=` (plain-text altitude) and
+`fake=` (synthetic test ramp) query params as the website's `/api/current`. It is
+unauthenticated — only expose it on a trusted LAN, never over the public internet.
+
 ## Configuration
 
 Edit `feeder.py` to change:
@@ -80,3 +94,4 @@ Edit `feeder.py` to change:
 | `SBS_PORT` | `30003` | SBS TCP port |
 | `SERVER_URL` | `http://100.70.200.82:5000/sbs` | Tracking server endpoint |
 | `SEND_INTERVAL` | `5` | Seconds between batches |
+| `ALTITUDE_API_PORT` | `9878` | LAN altitude query endpoint for a local display device |
