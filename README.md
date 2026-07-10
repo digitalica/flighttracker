@@ -7,7 +7,7 @@ Personal project that tracks a set of EHHV-based aircraft using an ADS-B feeder.
 ```
 ADS-B feeder (adsb.im / ultrafeeder / readsb)
   └─ SBS TCP stream on :30003
-       └─ adsbfeeder/feeder.py   — filters by ICAO hex, POSTs batches to server every 5 s
+       └─ feeder/feeder.py   — filters by ICAO hex, POSTs batches to server every 5 s
             └─ POST /sbs  ──►  website/server.py :5000
                                   stores readings in SQLite
                                   serves altitude graph + events frontend
@@ -24,7 +24,7 @@ ADS-B feeder (adsb.im / ultrafeeder / readsb)
 ## Repo layout
 
 ```
-adsbfeeder/          # feeder client (runs on the ADS-B feeder image)
+feeder/          # feeder client (runs on the ADS-B feeder image)
 website/             # Flask server + Chart.js frontend
   server.py          # ingest, SQLite, API, event detection
   templates/         # index.html — single-page app
@@ -46,7 +46,7 @@ docker-compose.yml
 cd website && pip install -r requirements.txt && python server.py
 
 # Feeder (needs a reachable dump1090/readsb on :30003)
-cd adsbfeeder && pip install -r requirements.txt && python feeder.py
+cd feeder && pip install -r requirements.txt && python feeder.py
 
 # Replay a log file at real-time pace
 python tools/replay.py --realtime

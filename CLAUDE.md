@@ -7,7 +7,7 @@ Personal project to track a small set of aircraft using an ADS-B feeder.
 ```
 ADS-B feeder image (adsb.im / ultrafeeder / readsb)
   └─ SBS TCP stream on :30003
-       └─ adsbfeeder/feeder.py   — reads stream, POSTs batches to server every 5s
+       └─ feeder/feeder.py   — reads stream, POSTs batches to server every 5s
             └─ POST /sbs  ──►  website/server.py :5000
                                   stores readings in SQLite (flighttracker.db)
                                   GET /api/aircraft           — list of tracked aircraft
@@ -71,7 +71,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 ## Repo layout
 
 ```
-adsbfeeder/
+feeder/
   feeder.py                     # runs on the ADS-B feeder image
   requirements.txt              # requests
   flighttracker-feeder.service  # systemd unit
@@ -115,7 +115,7 @@ docker-compose.yml              # brings up the website container
 cd website && pip install -r requirements.txt && python server.py
 
 # Feeder (needs a reachable dump1090/readsb on :30003)
-cd adsbfeeder && pip install -r requirements.txt && python feeder.py
+cd feeder && pip install -r requirements.txt && python feeder.py
 ```
 
 ## Website UI
