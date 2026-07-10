@@ -68,6 +68,11 @@ ALTITUDE_API_PORT = 9878  # local /api/current endpoint for a LAN display device
 MAX_BACKLOG_DAYS = 7
 PERSIST_PATH = Path(os.environ.get("FEEDER_DB", Path(__file__).parent / "pending.db"))
 
+# Full raw-message archive for PH-TGC (checks/replay). Separate from the backlog
+# above: this is a permanent, unpruned log, not a transient retry queue.
+TGC_LOG_PATH = Path(os.environ.get("TGC_LOG_DB", Path(__file__).parent / "tgc_log.db"))
+TGC_LOG_FLUSH_INTERVAL = 5  # seconds between batched writes to TGC_LOG_PATH
+
 # Tracked aircraft: ICAO hex -> registration. Only messages for these hexes are
 # forwarded to the server. Kept in sync manually with website/server.py's
 # TARGET_AIRCRAFT (duplicated intentionally rather than shared between the two).
@@ -121,13 +126,44 @@ def _is_target(line: str) -> bool:
     return parts[4].strip().lower() in TARGET_HEXES
 
 
+# SBS field indices (0-based after splitting on comma):
+# MSG,<type>,<sid>,<aid>,<hex>,<fid>,<date_gen>,<time_gen>,<date_log>,<time_log>,
+#     <callsign>,<alt>,<gs>,<track>,<lat>,<lon>,<vrate>,<squawk>,<alert>,<emerg>,<spi>,<gnd>
 SBS_IDX = {
-    "msg_type": 1,
-    "hex":      4,
-    "date_gen": 6,
-    "time_gen": 7,
-    "altitude": 11,
+    "msg_type":      1,
+    "session_id":    2,
+    "aircraft_id":   3,
+    "hex":           4,
+    "flight_id":     5,
+    "date_gen":      6,
+    "time_gen":      7,
+    "date_log":      8,
+    "time_log":      9,
+    "callsign":      10,
+    "altitude":      11,
+    "ground_speed":  12,
+    "track":         13,
+    "lat":           14,
+    "lon":           15,
+    "vertical_rate": 16,
+    "squawk":        17,
+    "alert":         18,
+    "emergency":     19,
+    "spi":           20,
+    "on_ground":     21,
 }
+
+
+def _parse_sbs_timestamp(date_str: str | None, time_str: str | None) -> str | None:
+    """Combine SBS date_gen/time_gen fields into an ISO UTC timestamp, if parseable."""
+    if not date_str or not time_str:
+        return None
+    for fmt in ("%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
+        try:
+            return datetime.strptime(f"{date_str} {time_str}", fmt).replace(tzinfo=timezone.utc).isoformat()
+        except ValueError:
+            pass
+    return None
 
 
 def _parse_altitude(line: str) -> dict | None:
@@ -153,21 +189,62 @@ def _parse_altitude(line: str) -> dict | None:
     except ValueError:
         return None
 
-    date_str = get(SBS_IDX["date_gen"])
-    time_str = get(SBS_IDX["time_gen"])
-    if not date_str or not time_str:
-        return None
-    ts = None
-    for fmt in ("%Y/%m/%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
-        try:
-            ts = datetime.strptime(f"{date_str} {time_str}", fmt).replace(tzinfo=timezone.utc)
-            break
-        except ValueError:
-            pass
+    ts = _parse_sbs_timestamp(get(SBS_IDX["date_gen"]), get(SBS_IDX["time_gen"]))
     if ts is None:
         return None
 
-    return {"hex": hex_code.lower(), "ts": ts.isoformat(), "altitude": altitude}
+    return {"hex": hex_code.lower(), "ts": ts, "altitude": altitude}
+
+
+def _parse_tgc_line(line: str) -> dict | None:
+    """Extract every available field from an SBS line belonging to PH-TGC.
+
+    Unlike _parse_altitude, fields are not gated by msg_type: SBS already leaves
+    irrelevant fields blank per message type, so we just read whatever is present.
+    Used to build a full local archive for later checks/replay.
+    """
+    parts = line.split(",")
+    if len(parts) <= SBS_IDX["hex"]:
+        return None
+
+    def get(idx, cast=str):
+        if idx >= len(parts):
+            return None
+        v = parts[idx].strip()
+        if not v:
+            return None
+        try:
+            return cast(v)
+        except ValueError:
+            return None
+
+    hex_code = get(SBS_IDX["hex"])
+    if not hex_code or hex_code.lower() != TGC_HEX:
+        return None
+
+    on_ground = get(SBS_IDX["on_ground"])
+    return {
+        "received_ts":   datetime.now(timezone.utc).isoformat(),
+        "msg_ts":        _parse_sbs_timestamp(get(SBS_IDX["date_gen"]), get(SBS_IDX["time_gen"])),
+        "msg_type":      get(SBS_IDX["msg_type"]),
+        "hex":           hex_code.lower(),
+        "session_id":    get(SBS_IDX["session_id"]),
+        "aircraft_id":   get(SBS_IDX["aircraft_id"]),
+        "flight_id":     get(SBS_IDX["flight_id"]),
+        "callsign":      get(SBS_IDX["callsign"]),
+        "altitude":      get(SBS_IDX["altitude"], int),
+        "ground_speed":  get(SBS_IDX["ground_speed"], float),
+        "track":         get(SBS_IDX["track"], float),
+        "lat":           get(SBS_IDX["lat"], float),
+        "lon":           get(SBS_IDX["lon"], float),
+        "vertical_rate": get(SBS_IDX["vertical_rate"], int),
+        "squawk":        get(SBS_IDX["squawk"]),
+        "alert":         get(SBS_IDX["alert"], int),
+        "emergency":     get(SBS_IDX["emergency"], int),
+        "spi":           get(SBS_IDX["spi"], int),
+        "on_ground":     1 if on_ground in ("1", "-1") else (0 if on_ground is not None else None),
+        "raw":           line,
+    }
 
 
 logging.basicConfig(
@@ -181,6 +258,7 @@ _buffer: deque[str] = deque()
 _lock = threading.Lock()
 _aircraft_last_seen: dict[str, float] = {}  # hex -> epoch time of last SBS message
 _altitude_history: dict[str, deque[dict]] = {}  # hex -> deque of {"ts", "alt_baro"}, oldest first
+_tgc_log_buffer: deque[dict] = deque()  # rows pending write to TGC_LOG_PATH
 
 _sbs_connected   = Gauge('feeder_sbs_connected',        '1 if currently connected to the SBS stream')
 _buffer_size     = Gauge('feeder_buffer_size',           'In-memory message buffer size')
@@ -246,6 +324,72 @@ def _backlog_size() -> int:
 
 
 # ---------------------------------------------------------------------------
+# TGC message log (SQLite)
+#
+# A permanent, unpruned archive of every raw SBS line seen for PH-TGC, for later
+# ad-hoc checks and replay. Independent of server reachability/the backlog above.
+# ---------------------------------------------------------------------------
+
+_TGC_LOG_COLUMNS = [
+    "received_ts", "msg_ts", "msg_type", "hex", "session_id", "aircraft_id",
+    "flight_id", "callsign", "altitude", "ground_speed", "track", "lat", "lon",
+    "vertical_rate", "squawk", "alert", "emergency", "spi", "on_ground", "raw",
+]
+
+
+def _init_tgc_log() -> None:
+    with sqlite3.connect(TGC_LOG_PATH) as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                received_ts   TEXT    NOT NULL,
+                msg_ts        TEXT,
+                msg_type      TEXT,
+                hex           TEXT    NOT NULL,
+                session_id    TEXT,
+                aircraft_id   TEXT,
+                flight_id     TEXT,
+                callsign      TEXT,
+                altitude      INTEGER,
+                ground_speed  REAL,
+                track         REAL,
+                lat           REAL,
+                lon           REAL,
+                vertical_rate INTEGER,
+                squawk        TEXT,
+                alert         INTEGER,
+                emergency     INTEGER,
+                spi           INTEGER,
+                on_ground     INTEGER,
+                raw           TEXT    NOT NULL
+            )
+        """)
+        con.execute("CREATE INDEX IF NOT EXISTS idx_messages_msg_ts ON messages(msg_ts)")
+
+
+def tgc_log_writer():
+    """Periodically drain _tgc_log_buffer and batch-insert it into TGC_LOG_PATH."""
+    con = sqlite3.connect(TGC_LOG_PATH)
+    placeholders = ",".join(f":{c}" for c in _TGC_LOG_COLUMNS)
+    insert_sql = f"INSERT INTO messages ({','.join(_TGC_LOG_COLUMNS)}) VALUES ({placeholders})"
+    try:
+        while True:
+            time.sleep(TGC_LOG_FLUSH_INTERVAL)
+            with _lock:
+                batch = list(_tgc_log_buffer)
+                _tgc_log_buffer.clear()
+            if not batch:
+                continue
+            try:
+                con.executemany(insert_sql, batch)
+                con.commit()
+            except sqlite3.Error as exc:
+                log.warning(f"Failed to write {len(batch)} rows to TGC log: {exc}")
+    finally:
+        con.close()
+
+
+# ---------------------------------------------------------------------------
 # SBS reader
 # ---------------------------------------------------------------------------
 
@@ -296,6 +440,9 @@ def read_sbs():
                                 parsed = _parse_altitude(line)
                                 if parsed:
                                     _store_altitude(parsed["hex"], parsed["ts"], parsed["altitude"])
+                                tgc_row = _parse_tgc_line(line)
+                                if tgc_row:
+                                    _tgc_log_buffer.append(tgc_row)
         except (OSError, socket.timeout) as exc:
             log.warning(f"SBS connection error: {exc}")
         _sbs_connected.set(0)
@@ -593,12 +740,17 @@ def main():
     altitude_server = ThreadingHTTPServer(("0.0.0.0", ALTITUDE_API_PORT), AltitudeHandler)
     log.info(f"Altitude API : http://0.0.0.0:{ALTITUDE_API_PORT}/api/current")
 
+    _init_tgc_log()
+    log.info(f"TGC log DB   : {TGC_LOG_PATH}")
+
     reader    = threading.Thread(target=read_sbs,             daemon=True, name="sbs-reader")
     announcer = threading.Thread(target=announce_loop,         daemon=True, name="announcer")
     altitude  = threading.Thread(target=altitude_server.serve_forever, daemon=True, name="altitude-api")
+    tgc_log   = threading.Thread(target=tgc_log_writer,        daemon=True, name="tgc-log-writer")
     reader.start()
     announcer.start()
     altitude.start()
+    tgc_log.start()
 
     send_loop()  # runs in main thread
 

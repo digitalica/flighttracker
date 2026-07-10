@@ -84,6 +84,18 @@ Supports the same `ac=` (registration or hex), `simple=` (plain-text altitude) a
 `fake=` (synthetic test ramp) query params as the website's `/api/current`. It is
 unauthenticated — only expose it on a trusted LAN, never over the public internet.
 
+## Local PH-TGC message log
+
+Every raw SBS message seen for PH-TGC (hex `484763`) — not just altitude readings —
+is archived locally in a SQLite database (`tgc_log.db`, next to `feeder.py` by
+default), for later checks or replay. This file grows without pruning and is
+local-only (never synced to the website or anywhere else). Query it directly with
+the `sqlite3` CLI, e.g.:
+
+```bash
+sqlite3 /opt/flighttracker/tgc_log.db "SELECT count(*), msg_type FROM messages GROUP BY msg_type"
+```
+
 ## Configuration
 
 Edit `feeder.py` to change:
@@ -95,3 +107,4 @@ Edit `feeder.py` to change:
 | `SERVER_URL` | `http://100.70.200.82:5000/sbs` | Tracking server endpoint |
 | `SEND_INTERVAL` | `5` | Seconds between batches |
 | `ALTITUDE_API_PORT` | `9878` | LAN altitude query endpoint for a local display device |
+| `TGC_LOG_DB` (env var) | `tgc_log.db` next to `feeder.py` | Full raw-message archive for PH-TGC (checks/replay) |
