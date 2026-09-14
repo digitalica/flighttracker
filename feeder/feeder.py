@@ -271,7 +271,7 @@ _tgc_log_buffer: deque[dict] = deque()  # rows pending write to TGC_LOG_PATH
 
 _sbs_connected   = Gauge('feeder_sbs_connected',        '1 if currently connected to the SBS stream')
 _buffer_size     = Gauge('feeder_buffer_size',           'In-memory message buffer size')
-_backlog_size    = Gauge('feeder_backlog_size',          'Messages pending in SQLite backlog')
+_backlog_size_gauge = Gauge('feeder_backlog_size',       'Messages pending in SQLite backlog')
 _messages_read   = Counter('feeder_messages_read_total', 'SBS messages read from stream (all aircraft)')
 _target_messages = Counter('feeder_target_messages_total', 'Target aircraft messages added to buffer')
 _messages_sent   = Counter('feeder_messages_sent_total', 'Messages successfully sent to server')
@@ -292,6 +292,7 @@ def _init_backlog() -> None:
             )
         """)
     _prune_backlog()
+    _backlog_size_gauge.set(_backlog_size())
 
 
 def _prune_backlog() -> None:
@@ -299,7 +300,9 @@ def _prune_backlog() -> None:
     with sqlite3.connect(PERSIST_PATH) as con:
         n = con.execute("DELETE FROM pending WHERE received < ?", (cutoff,)).rowcount
     if n:
-        log.info(f"Pruned {n} messages older than {MAX_BACKLOG_DAYS} days from backlog")
+        remaining = _backlog_size()
+        _backlog_size_gauge.set(remaining)
+        log.info(f"Pruned {n} messages older than {MAX_BACKLOG_DAYS} days from backlog ({remaining} remaining)")
 
 
 def _enqueue_backlog(messages: list[str]) -> None:
@@ -309,7 +312,9 @@ def _enqueue_backlog(messages: list[str]) -> None:
             "INSERT INTO pending(received, msg) VALUES (?, ?)",
             [(now, m) for m in messages],
         )
-    log.info(f"Persisted {len(messages)} messages to backlog ({PERSIST_PATH})")
+        total = con.execute("SELECT COUNT(*) FROM pending").fetchone()[0]
+    _backlog_size_gauge.set(total)
+    log.info(f"Persisted {len(messages)} messages to backlog ({total} pending)")
 
 
 def _peek_backlog(limit: int) -> tuple[list[int], list[str]]:
@@ -627,7 +632,7 @@ def send_loop():
                 _messages_sent.inc(len(combined))
                 last_send = time.monotonic()
                 remaining = _backlog_size()
-                _backlog_size.set(remaining)
+                _backlog_size_gauge.set(remaining)
                 log.info(
                     f"Backlog: sent {len(backlog_msgs)} + {len(batch)} fresh"
                     f" -> HTTP {resp.status_code}"
