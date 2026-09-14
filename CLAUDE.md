@@ -60,6 +60,14 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 484C49   | PH1311       | Schleicher ASK-21           | glider                       |
 | A0796C   | N13FY        | North American T-6 Texan    | US registration, 1942        |
 | 48488D   | PH-JMP       | Cessna 208 Grand Caravan    |                              |
+| 484C00   | PH-SWP       | Cessna 208 Grand Caravan    |                              |
+| 48648A   | PH-SPT       | Cessna 208 Grand Caravan    |                              |
+| 485872   | PH-FTW       | Cessna 208B Grand Caravan   |                              |
+| 4857FE   | PH-STN       | Cessna 208B Grand Caravan   | Supervan 900                 |
+| 485B88   | PH-TXL       | Cessna 208B Grand Caravan   | Supervan 900                 |
+| 485A48   | PH-TEX       | Cessna 208B Grand Caravan   | Supervan 900                 |
+| 485121   | PH-KHP       | Cessna 206H Stationair      | Soloy Turbine conversion     |
+| 4851C8   | PH-JAS       | Cessna 208A Caravan         | Texas Turbine Supervan       |
 
 ## Infrastructure
 
