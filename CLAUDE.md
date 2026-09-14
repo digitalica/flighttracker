@@ -59,6 +59,7 @@ The feeder filters by ICAO hex before sending; only target aircraft messages rea
 | 3ECADC   | D-KRUA       | Schleicher ASG-29           | glider, German               |
 | 484C49   | PH1311       | Schleicher ASK-21           | glider                       |
 | A0796C   | N13FY        | North American T-6 Texan    | US registration, 1942        |
+| 48488D   | PH-JMP       | Cessna 208 Grand Caravan    |                              |
 
 ## Infrastructure
 
