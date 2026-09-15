@@ -59,7 +59,6 @@ TARGET_AIRCRAFT = {
     "4845f0": "PH-VHD",
     "484608": "PH-JBC",
     "484655": "PH-CBN",
-    "48481f": "PH-WMA",
     "486237": "PH-VHY",
     "485fd8": "PH-VHP",
     "4863ff": "PH-VHK",
