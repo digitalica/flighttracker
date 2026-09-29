@@ -549,11 +549,24 @@ def status():
         cutoff = now.timestamp() - VISITOR_TIMEOUT
         active = sum(1 for t in _visitors.values() if t.timestamp() >= cutoff)
         last_post = _last_post.isoformat() if _last_post else None
+    # Bounded to today, per aircraft: the frontend (app.js acStatus()) treats any
+    # last-seen before today's midnight identically to "no data at all" (both ->
+    # inactive), so scanning further back buys nothing while costing more every
+    # day the (unpruned) table grows. A single un-filtered "GROUP BY icao_hex"
+    # can't use idx_readings(icao_hex, ts) at all (its leading column is
+    # icao_hex, so filtering only on ts still forces a full scan) -- querying
+    # per known hex instead turns each lookup into an indexed SEARCH bounded to
+    # today's volume, not the table's entire history.
+    since_today = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    seen: dict[str, str] = {}
     with _db() as conn:
-        rows = conn.execute(
-            "SELECT icao_hex, MAX(ts) AS last_seen FROM readings GROUP BY icao_hex"
-        ).fetchall()
-    seen = {r["icao_hex"]: r["last_seen"] for r in rows}
+        for h in TARGET_AIRCRAFT:
+            row = conn.execute(
+                "SELECT MAX(ts) AS last_seen FROM readings WHERE icao_hex = ? AND ts >= ?",
+                (h, since_today),
+            ).fetchone()
+            if row and row["last_seen"]:
+                seen[h] = row["last_seen"]
     return jsonify({
         "last_post": last_post,
         "active_users": active,
