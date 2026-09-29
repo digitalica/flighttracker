@@ -36,7 +36,7 @@ Pushing to `main` triggers a GitHub Actions workflow that builds and pushes a ne
 `ghcr.io/digitalica/flighttracker:latest`. To deploy it on the server:
 
 ```bash
-cd /opt/flighttracker
+cd /opt/docker/flighttracker
 docker compose pull
 docker compose up -d
 ```

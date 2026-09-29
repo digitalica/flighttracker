@@ -59,7 +59,6 @@ TARGET_AIRCRAFT = {
     "4845f0": "PH-VHD",
     "484608": "PH-JBC",
     "484655": "PH-CBN",
-    "48481f": "PH-WMA",
     "486237": "PH-VHY",
     "485fd8": "PH-VHP",
     "4863ff": "PH-VHK",
@@ -84,6 +83,15 @@ TARGET_AIRCRAFT = {
     "3ecadc": "D-KRUA",
     "484c49": "PH1311",
     "a0796c": "N13FY",
+    "48488d": "PH-JMP",
+    "484c00": "PH-SWP",
+    "48648a": "PH-SPT",
+    "485872": "PH-FTW",
+    "4857fe": "PH-STN",
+    "485b88": "PH-TXL",
+    "485a48": "PH-TEX",
+    "485121": "PH-KHP",
+    "4851c8": "PH-JAS",
 }
 
 SBS_IDX = {
