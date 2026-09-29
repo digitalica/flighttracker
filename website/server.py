@@ -284,12 +284,11 @@ def _ingest(messages: list[str]) -> tuple[int, int, list[float]]:
         return 0, 0, []
 
     with _db() as conn:
-        for row in db_rows:
-            conn.execute(
-                "INSERT INTO readings (icao_hex, ts, alt_baro, lat, lon, on_ground)"
-                " VALUES (?,?,?,?,?,?)",
-                row,
-            )
+        conn.executemany(
+            "INSERT INTO readings (icao_hex, ts, alt_baro, lat, lon, on_ground)"
+            " VALUES (?,?,?,?,?,?)",
+            db_rows,
+        )
 
     return parsed_count, len(seen_aircraft), lags
 
