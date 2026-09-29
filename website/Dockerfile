@@ -12,4 +12,4 @@ COPY templates/ templates/
 COPY static/ static/
 COPY server.py ./
 
-CMD ["gunicorn", "--workers", "1", "--threads", "2", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "server:app"]
+CMD ["gunicorn", "--workers", "1", "--threads", "2", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "--access-logformat", "%(h)s %(l)s %(u)s %(t)s \"%(r)s\" %(s)s %(b)s \"%(f)s\" \"%(a)s\" %(D)s", "server:app"]
